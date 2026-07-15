@@ -110,7 +110,7 @@ This JSON store is intentionally designed for a single local Node.js process. Pl
 | --- | --- |
 | `npm run dev` | Start the development server |
 | `npm run build` | Create a production build |
-| `npm start` | Serve the production build |
+| `npm start` | Load `.env` and serve the standalone production build |
 | `npm run lint` | Run ESLint with warnings treated as failures |
 | `npm run typecheck` | Run strict TypeScript checking |
 | `npm test` | Run unit, component, and backend tests once |
@@ -119,6 +119,13 @@ This JSON store is intentionally designed for a single local Node.js process. Pl
 | `npm run check` | Run lint, typecheck, unit/backend/component tests, production build, and Playwright |
 
 Playwright writes only to `tests/.tmp/e2e-data`, removes that directory after the run, and uses `tests/fixtures/google-calendar-events.json`. Its hidden sign-in mechanism is guarded by test-only environment values configured in `playwright.config.ts`. Browser coverage runs at 1440×900, 834×1112, and 390×844.
+
+The production build uses Next.js standalone output. `npm run build` copies static
+assets into `.next/standalone` and removes any `.env` files traced there by Next.js.
+Keep `.env` outside the deployed standalone directory and start the server from the
+directory containing that file. Restart `npm start` after changing it; the file is
+loaded afresh whenever the Node.js process starts, so environment changes do not
+require a rebuild.
 
 ## API overview
 
