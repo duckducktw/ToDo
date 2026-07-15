@@ -1,0 +1,70 @@
+{
+  "kind": "calendar#events",
+  "summary": "Playwright fixture calendar",
+  "timeZone": "Asia/Taipei",
+  "nextSyncToken": "fixture-sync-token",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "fixture-morning-review",
+      "status": "confirmed",
+      "summary": "晨間檢視",
+      "start": {
+        "dateTime": "2026-07-15T09:00:00+08:00",
+        "timeZone": "Asia/Taipei"
+      },
+      "end": {
+        "dateTime": "2026-07-15T09:30:00+08:00",
+        "timeZone": "Asia/Taipei"
+      }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "fixture-project-meeting",
+      "status": "confirmed",
+      "summary": "專案會議",
+      "start": {
+        "dateTime": "2026-07-15T14:00:00+08:00",
+        "timeZone": "Asia/Taipei"
+      },
+      "end": {
+        "dateTime": "2026-07-15T15:00:00+08:00",
+        "timeZone": "Asia/Taipei"
+      }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "fixture-all-day",
+      "status": "confirmed",
+      "summary": "提案截止日",
+      "start": { "date": "2026-07-16" },
+      "end": { "date": "2026-07-17" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "fixture-multi-day",
+      "status": "confirmed",
+      "summary": "產品工作坊",
+      "start": {
+        "dateTime": "2026-07-17T16:00:00+08:00",
+        "timeZone": "Asia/Taipei"
+      },
+      "end": {
+        "dateTime": "2026-07-18T11:00:00+08:00",
+        "timeZone": "Asia/Taipei"
+      }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "fixture-cancelled",
+      "status": "cancelled",
+      "summary": "已取消事件",
+      "start": {
+        "dateTime": "2026-07-15T12:00:00+08:00"
+      },
+      "end": {
+        "dateTime": "2026-07-15T13:00:00+08:00"
+      }
+    }
+  ]
+}

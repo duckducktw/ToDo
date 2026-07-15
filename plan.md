@@ -227,7 +227,7 @@ my-hybrid-todo/
 │           └── google\_50928374.json // User B's isolated task data  
 ├── package.json  
 ├── tailwind.config.js  
-└── .env.local                       // Local environment configuration (not committed to Git)
+└── .env                             // Local environment configuration (not committed to Git)
 
 ### **2\. Core Module Responsibilities**
 
@@ -247,7 +247,7 @@ my-hybrid-todo/
 
 ## **VIII. Environment Variable Configuration (Environment Variables)**
 
-To secure API keys and sensitive information while keeping the system portable across production environments, NAS devices, and cloud platforms, an environment configuration file such as `.env.local` must be created in the project root. The system uses the following environment variables:
+To secure API keys and sensitive information while keeping the system portable across production environments, NAS devices, and cloud platforms, an `.env` file must be created in the project root. The system uses the following environment variables:
 
 | Variable | Required | Description / Purpose | Example / Default |
 | :---- | :---- | :---- | :---- |
@@ -260,7 +260,7 @@ To secure API keys and sensitive information while keeping the system portable a
 
 ### **Security and Deployment Notes:**
 
-1. **Prevent Secret Leakage**: `.env` and `.env.local` contain highly sensitive Google API credentials and the encryption secret (`AUTH_SECRET`) and **must never** be committed to Git. Add the `.env*` rule to `.gitignore` when initializing the project.  
+1. **Prevent Secret Leakage**: `.env` contains highly sensitive Google API credentials and the encryption secret (`AUTH_SECRET`) and **must never** be committed to Git. Add the `.env*` rule to `.gitignore` when initializing the project.  
 2. **Google Cloud Console Authorization and Redirect Configuration**:  
    * In Google Cloud Console, set **已授權的重新導向 URI (Authorized redirect URIs)** in the OAuth credentials to:  
      * Local development: http://localhost:3000/api/auth/callback/google  

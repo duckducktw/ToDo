@@ -1,0 +1,25 @@
+# Dependencies and build output
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+tests/.tmp/
+*.tsbuildinfo
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Runtime user data
+src/data/users.json
+src/data/tasks/*.json
+src/data/oauth/*.json
+src/data/**/*.lock
+src/data/**/*.tmp
+
+# Local tooling
+.DS_Store
+*.log

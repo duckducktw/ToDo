@@ -1,0 +1,140 @@
+# Smart Dual-Track ToDo
+
+A private, local-first task planner that keeps application tasks separate from a read-only Google Calendar reference. The interface is in Traditional Chinese and provides two views:
+
+- **今日焦點** for completing today's work alongside a calendar timeline
+- **週／月安排** for scheduling and reordering tasks across dates
+
+Tasks are stored as isolated JSON files per Google account. Google Calendar events are fetched on demand and are never copied into the task store.
+
+## Requirements
+
+- Node.js 22 or newer
+- npm
+- A Google Cloud OAuth 2.0 web client for live sign-in and Calendar access
+
+## Local setup
+
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+   To run browser tests, install Chromium once:
+
+   ```bash
+   npx playwright install chromium
+   ```
+
+2. Create the local environment file:
+
+   ```bash
+   cp .env.example .env
+   openssl rand -base64 32
+   ```
+
+   Place the generated value in `.env` as `AUTH_SECRET`.
+
+3. Configure a Google OAuth client as described below and set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`.
+
+4. Start the application:
+
+   ```bash
+   npm run dev
+   ```
+
+5. Open <http://localhost:3000>.
+
+## Google OAuth configuration
+
+In Google Cloud Console:
+
+1. Create or select a project and enable **Google Calendar API**.
+2. Configure the OAuth consent screen. Add the scopes `openid`, `email`, `profile`, and `https://www.googleapis.com/auth/calendar.events.readonly`.
+3. Create an **OAuth client ID** with application type **Web application**.
+4. Add `http://localhost:3000` as an authorized JavaScript origin.
+5. Add `http://localhost:3000/api/auth/callback/google` as an authorized redirect URI.
+6. During development, add the Google accounts that may sign in as consent-screen test users.
+
+The application asks for offline access so an expired Calendar access token can be refreshed. Revoking the grant, removing the Calendar scope, or losing the refresh token results in a reconnect prompt; task functionality remains available.
+
+## Environment variables
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `AUTH_URL` | Yes | Public application origin used by Auth.js, normally `http://localhost:3000` |
+| `AUTH_SECRET` | Yes | At least 32 random characters used to protect authentication state and the local token vault |
+| `AUTH_GOOGLE_ID` | Yes | Google OAuth web client ID |
+| `AUTH_GOOGLE_SECRET` | Yes | Google OAuth web client secret |
+| `DATA_STORE_DIR` | No | JSON data root; defaults to `src/data` |
+| `APP_DEFAULT_TIMEZONE` | No | IANA fallback timezone; defaults to `Asia/Taipei` |
+| `AUTH_TEST_MODE` | Tests only | Enables the hidden deterministic test identity when exactly `true` |
+| `TEST_AUTH_SECRET` | Tests only | Additional guard required by the browser-test sign-in flow |
+| `CALENDAR_FIXTURE_PATH` | Tests only | Local deterministic Calendar fixture used by automated tests |
+
+Never commit `.env`, OAuth credentials, `AUTH_SECRET`, or a populated data directory. Do not enable `AUTH_TEST_MODE` on a network-accessible instance.
+
+## Data storage
+
+The default data root is `src/data`; it is created on first use and ignored by Git. A deployment should set `DATA_STORE_DIR` to a persistent directory that is readable and writable only by the application process.
+
+```text
+<DATA_STORE_DIR>/
+├── users.json
+├── oauth/
+│   └── google_<subject>.json
+└── tasks/
+    └── google_<subject>.json
+```
+
+The authenticated Google `sub` determines the file name; request parameters never select a user file. Writes use locking and atomic replacement, and mutations use a revision precondition to prevent stale clients from overwriting newer state. OAuth tokens are server-only and encrypted at rest using key material derived from `AUTH_SECRET`.
+
+Back up the entire data root together with the same `AUTH_SECRET`. Changing the secret invalidates sessions and makes an existing token vault unreadable, so users must reconnect Google Calendar.
+
+This JSON store is intentionally designed for a single local Node.js process. Place `DATA_STORE_DIR` on a filesystem that enforces POSIX `0700` directory and `0600` file permissions; FAT/NTFS-style removable mounts may ignore those protections. It is not suitable for serverless, multi-instance, shared-network-filesystem, or untrusted multi-tenant deployment. Migrate to a transactional database and managed secret store before using those topologies.
+
+## Behavior
+
+- Dates are interpreted in each user's browser-reported IANA timezone, with `Asia/Taipei` as the initial fallback.
+- Loading Today, returning to a visible tab, or crossing a local-day boundary rolls every overdue incomplete task forward to today. Flexible and locked tasks both roll over.
+- Completing the last active task today pulls at most three future flexible tasks into today. Completing that batch can pull another batch.
+- Google Calendar is always read-only. Calendar failures do not block task operations.
+- Task titles are 1–120 trimmed characters; descriptions are optional and limited to 1,000 characters.
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the development server |
+| `npm run build` | Create a production build |
+| `npm start` | Serve the production build |
+| `npm run lint` | Run ESLint with warnings treated as failures |
+| `npm run typecheck` | Run strict TypeScript checking |
+| `npm test` | Run unit, component, and backend tests once |
+| `npm run test:watch` | Run Vitest in watch mode |
+| `npm run test:e2e` | Start an isolated test server and run Playwright |
+| `npm run check` | Run lint, typecheck, unit/backend/component tests, production build, and Playwright |
+
+Playwright writes only to `tests/.tmp/e2e-data`, removes that directory after the run, and uses `tests/fixtures/google-calendar-events.json`. Its hidden sign-in mechanism is guarded by test-only environment values configured in `playwright.config.ts`. Browser coverage runs at 1440×900, 834×1112, and 390×844.
+
+## API overview
+
+All endpoints require an authenticated session, return private/no-store responses, and derive account identity on the server.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/tasks?from=YYYY-MM-DD&to=YYYY-MM-DD` | Read an inclusive task range (maximum 62 days) |
+| `POST` | `/api/tasks` | Create a task |
+| `POST` | `/api/tasks/rollover` | Apply idempotent overdue rollover |
+| `PATCH` | `/api/tasks/:id` | Edit, move, complete, or reopen a task |
+| `PUT` | `/api/tasks/reorder` | Reorder or move an active task |
+| `DELETE` | `/api/tasks/:id` | Delete a task |
+| `PATCH` | `/api/me` | Save the browser's IANA timezone |
+| `GET` | `/api/calendar?from=...&to=...` | Read normalized primary-calendar events |
+
+Task mutations send the current revision in `If-Match`. A `412` response means another request wrote first; clients refetch authoritative state before retrying.
+
+## Current scope
+
+The project targets localhost and a single primary Google Calendar. Calendar writes, reminders, sharing, subtasks, analytics, offline mode, dark mode, localization beyond Traditional Chinese, Docker, and hosted production deployment are intentionally out of scope.
