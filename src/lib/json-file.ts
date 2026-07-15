@@ -14,9 +14,22 @@ import type { ZodType } from "zod";
 
 import { AppError } from "@/lib/errors";
 
+async function setPrivateMode(
+  applyMode: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await applyMode();
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EPERM" && code !== "ENOSYS" && code !== "EOPNOTSUPP") {
+      throw error;
+    }
+  }
+}
+
 export async function ensurePrivateDirectory(directory: string): Promise<void> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  await chmod(directory, 0o700);
+  await setPrivateMode(() => chmod(directory, 0o700));
 }
 
 export async function readValidatedJson<T>(
@@ -61,7 +74,7 @@ export async function atomicWriteJson(
   try {
     handle = await open(temporaryPath, "wx", 0o600);
     await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`, "utf8");
-    await handle.chmod(0o600);
+    await setPrivateMode(() => handle!.chmod(0o600));
     await handle.sync();
     await handle.close();
     handle = null;

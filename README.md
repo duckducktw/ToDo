@@ -94,6 +94,11 @@ Back up the entire data root together with the same `AUTH_SECRET`. Changing the 
 
 This JSON store is intentionally designed for a single local Node.js process. Place `DATA_STORE_DIR` on a filesystem that enforces POSIX `0700` directory and `0600` file permissions; FAT/NTFS-style removable mounts may ignore those protections. It is not suitable for serverless, multi-instance, shared-network-filesystem, or untrusted multi-tenant deployment. Migrate to a transactional database and managed secret store before using those topologies.
 
+For Pterodactyl, use a writable persistent path such as
+`DATA_STORE_DIR=/home/container/data`. The store tolerates mounted filesystems that
+reject `chmod`, but the panel or host must still restrict access to that directory
+and allow the container user to create, rename, and delete files in it.
+
 ## Behavior
 
 - Dates are interpreted in each user's browser-reported IANA timezone, with `Asia/Taipei` as the initial fallback.
