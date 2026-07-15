@@ -1,9 +1,13 @@
 import { z } from "zod";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseExpectedRevision, parseJson } from "@/lib/api";
 
 const payloadSchema = z.object({ title: z.string() }).strict();
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function jsonRequest(
   url: string,
@@ -19,6 +23,7 @@ function jsonRequest(
 
 describe("API mutation guards", () => {
   it("accepts same-origin JSON and rejects a cross-origin mutation", async () => {
+    vi.stubEnv("AUTH_URL", "https://todo.example");
     await expect(
       parseJson(
         jsonRequest("https://todo.example/api/tasks", '{"title":"ok"}', {
@@ -36,6 +41,22 @@ describe("API mutation guards", () => {
         payloadSchema,
       ),
     ).rejects.toMatchObject({ code: "FORBIDDEN", status: 403 });
+  });
+
+  it("uses AUTH_URL as the public origin behind a reverse proxy", async () => {
+    vi.stubEnv("AUTH_URL", "https://todo.gdtw.qzz.io");
+
+    await expect(
+      parseJson(
+        jsonRequest("http://127.0.0.1:3000/api/tasks", '{"title":"ok"}', {
+          origin: "https://todo.gdtw.qzz.io",
+          host: "127.0.0.1:3000",
+          "x-forwarded-host": "todo.gdtw.qzz.io",
+          "x-forwarded-proto": "https",
+        }),
+        payloadSchema,
+      ),
+    ).resolves.toEqual({ title: "ok" });
   });
 
   it("requires a JSON content type", async () => {

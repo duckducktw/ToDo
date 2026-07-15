@@ -107,15 +107,16 @@ export function validateMutationOrigin(request: Request): void {
     return;
   }
 
-  let requestOrigin: string;
+  let trustedOrigin: string;
   let suppliedOrigin: string;
   try {
-    requestOrigin = new URL(request.url).origin;
+    const configuredUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL;
+    trustedOrigin = new URL(configuredUrl || request.url).origin;
     suppliedOrigin = new URL(origin).origin;
   } catch (error) {
     throw new AppError("FORBIDDEN", 403, "Request origin is invalid.", error);
   }
-  if (requestOrigin !== suppliedOrigin) {
+  if (trustedOrigin !== suppliedOrigin) {
     throw new AppError("FORBIDDEN", 403, "Cross-origin mutation denied.");
   }
 }
