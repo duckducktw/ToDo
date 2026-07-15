@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { CheckCheck, LockKeyhole } from "lucide-react";
 import { useState } from "react";
+import { ThemeSwitch } from "@/components/theme-switch";
 
 export function LoginView({ authError = false }: { authError?: boolean }) {
   const [pending, setPending] = useState(false);
@@ -24,15 +25,18 @@ export function LoginView({ authError = false }: { authError?: boolean }) {
   return (
     <main className="login-page">
       <section className="login-panel" aria-labelledby="login-title">
-        <div className="login-brand">
-          <span className="brand-mark large" aria-hidden="true"><CheckCheck size={24} strokeWidth={2.4} /></span>
-          <span>流動待辦</span>
+        <div className="login-panel-top">
+          <div className="login-brand">
+            <span className="brand-mark large" aria-hidden="true"><CheckCheck size={24} strokeWidth={2.4} /></span>
+            <span>流動待辦</span>
+          </div>
+          <ThemeSwitch className="login-theme-switch" />
         </div>
         <div className="login-heading">
           <span className="eyebrow">你的每日工作台</span>
           <h1 id="login-title">登入後開始安排</h1>
         </div>
-        <button className="google-signin" type="button" onClick={() => void handleSignIn()} disabled={pending}>
+        <button className="google-signin" type="button" autoComplete="off" onClick={() => void handleSignIn()} disabled={pending}>
           <span className="google-g" aria-hidden="true">G</span>
           {pending ? "前往 Google…" : "使用 Google 登入"}
         </button>

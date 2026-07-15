@@ -202,7 +202,7 @@ export function TodayCalendarPanel({ date }: { date: string }) {
 
 export function CalendarSkeleton({ compact = false }: { compact?: boolean }) {
   return (
-    <div className={`calendar-skeleton${compact ? " compact" : ""}`} aria-label="正在載入 Google 日曆">
+    <div className={`calendar-skeleton${compact ? " compact" : ""}`} role="status" aria-label="正在載入 Google 日曆">
       {Array.from({ length: compact ? 3 : 8 }, (_, index) => <span key={index} />)}
     </div>
   );

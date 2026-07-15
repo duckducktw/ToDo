@@ -21,6 +21,8 @@ import { getErrorMessage, useTaskActions, useTasks } from "@/hooks/use-productiv
 import { SortableTaskCard, type TaskMoveAction } from "@/components/task-card";
 import { TaskEditorDialog, type TaskEditorValue } from "@/components/task-editor-dialog";
 import { TodayCalendarPanel } from "@/components/calendar-panel";
+import { AnimatedDetails } from "@/components/animated-details";
+import { useCompletionAnimation } from "@/hooks/use-completion-animation";
 
 function browserToday() {
   return DateTime.local().toISODate() ?? "2026-07-15";
@@ -32,7 +34,7 @@ function isRolledOver(task: Task) {
 
 function TaskListSkeleton() {
   return (
-    <div className="task-list-skeleton" aria-label="正在載入待辦">
+    <div className="task-list-skeleton" role="status" aria-label="正在載入待辦">
       {Array.from({ length: 4 }, (_, index) => <span key={index} />)}
     </div>
   );
@@ -48,6 +50,7 @@ export function TodayView() {
   const timezoneReady = useTimezoneReady();
   const query = useTasks(date, date);
   const actions = useTaskActions();
+  const completion = useCompletionAnimation();
   const rolloverDateRef = useRef<string | null>(null);
   const pendingRef = useRef(false);
   const runRolloverRef = useRef(actions.runRollover);
@@ -60,16 +63,16 @@ export function TodayView() {
   }, [actions.isPending, actions.runRollover, query.refetch]);
 
   const activeTasks = useMemo(
-    () => (query.data?.tasks ?? []).filter((task) => task.status === "todo").sort((a, b) => a.sequence_order - b.sequence_order),
-    [query.data?.tasks],
+    () => (query.data?.tasks ?? []).filter((task) => task.status === "todo" || completion.completingIds.has(task.id)).sort((a, b) => a.sequence_order - b.sequence_order),
+    [completion.completingIds, query.data?.tasks],
   );
   const completedTasks = useMemo(
-    () => (query.data?.tasks ?? []).filter((task) => task.status === "done").sort((a, b) => a.sequence_order - b.sequence_order),
-    [query.data?.tasks],
+    () => (query.data?.tasks ?? []).filter((task) => task.status === "done" && !completion.completingIds.has(task.id)).sort((a, b) => a.sequence_order - b.sequence_order),
+    [completion.completingIds, query.data?.tasks],
   );
   const rolledTasks = activeTasks.filter(isRolledOver);
   const regularTasks = activeTasks.filter((task) => !isRolledOver(task));
-  const taskActionsDisabled = actions.isPending || !rolloverReady;
+  const taskActionsDisabled = actions.isPending || completion.completionActive || !rolloverReady;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -212,6 +215,7 @@ export function TodayView() {
     disabled: taskActionsDisabled,
     onToggle: (task: Task) => {
       if (!query.data || taskActionsDisabled) return;
+      if (task.status === "todo" && !completion.startCompletion(task.id)) return;
       void actions.updateTask(task.id, { status: task.status === "done" ? "todo" : "done" }, query.data.revision).catch(() => undefined);
     },
     onToggleFlexible: (task: Task) => {
@@ -231,7 +235,7 @@ export function TodayView() {
           <h1>今日焦點</h1>
           <p>{formattedDate.toFormat("yyyy 年 M 月 d 日")}</p>
         </div>
-        <button className="button primary add-task-button" type="button" onClick={openCreate} disabled={!query.data || taskActionsDisabled}>
+        <button className="button primary add-task-button" type="button" autoComplete="off" onClick={openCreate} disabled={!query.data || taskActionsDisabled}>
           <Plus aria-hidden="true" size={18} />
           新增待辦
         </button>
@@ -276,7 +280,7 @@ export function TodayView() {
                     <section className="task-group delayed-group" aria-labelledby="delayed-tasks-title">
                       <div className="task-group-title"><span id="delayed-tasks-title">延遲帶入</span><small>{rolledTasks.length}</small></div>
                       <div className="task-stack">
-                        {rolledTasks.map((task, index) => <SortableTaskCard key={task.id} task={task} index={index} count={rolledTasks.length} {...taskProps} />)}
+                        {rolledTasks.map((task, index) => <SortableTaskCard key={task.id} task={task} index={index} count={rolledTasks.length} completing={completion.completingIds.has(task.id)} {...taskProps} />)}
                       </div>
                     </section>
                   ) : null}
@@ -284,7 +288,7 @@ export function TodayView() {
                     <section className="task-group" aria-labelledby="regular-tasks-title">
                       <div className="task-group-title"><span id="regular-tasks-title">今日待辦</span><small>{regularTasks.length}</small></div>
                       <div className="task-stack">
-                        {regularTasks.map((task, index) => <SortableTaskCard key={task.id} task={task} index={index} count={regularTasks.length} {...taskProps} />)}
+                        {regularTasks.map((task, index) => <SortableTaskCard key={task.id} task={task} index={index} count={regularTasks.length} completing={completion.completingIds.has(task.id)} {...taskProps} />)}
                       </div>
                     </section>
                   ) : null}
@@ -301,12 +305,14 @@ export function TodayView() {
           ) : null}
 
           {completedTasks.length > 0 ? (
-            <details className="completed-disclosure">
-              <summary><span><CheckCircle2 aria-hidden="true" size={17} />已完成</span><span>{completedTasks.length}<ChevronDown className="disclosure-chevron" aria-hidden="true" size={17} /></span></summary>
+            <AnimatedDetails
+              className="completed-disclosure"
+              summary={<><span><CheckCircle2 aria-hidden="true" size={17} />已完成</span><span>{completedTasks.length}<ChevronDown className="disclosure-chevron" aria-hidden="true" size={17} /></span></>}
+            >
               <div className="task-stack completed-stack">
-                {completedTasks.map((task, index) => <SortableTaskCard key={task.id} task={task} index={index} count={completedTasks.length} {...taskProps} />)}
+                {completedTasks.map((task, index) => <SortableTaskCard key={task.id} task={task} index={index} count={completedTasks.length} completing={completion.completingIds.has(task.id)} {...taskProps} />)}
               </div>
-            </details>
+            </AnimatedDetails>
           ) : null}
           <p className="screen-reader-status" aria-live="assertive">{dragAnnouncement}</p>
         </section>

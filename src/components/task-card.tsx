@@ -29,6 +29,7 @@ interface TaskCardProps {
   count: number;
   compact?: boolean;
   disabled?: boolean;
+  completing?: boolean;
   dragHandleProps?: Record<string, unknown>;
   onToggle: (task: Task) => void;
   onToggleFlexible: (task: Task) => void;
@@ -67,6 +68,7 @@ export function TaskCard({
   count,
   compact = false,
   disabled = false,
+  completing = false,
   dragHandleProps,
   onToggle,
   onToggleFlexible,
@@ -78,16 +80,18 @@ export function TaskCard({
   const isPending = task.id.startsWith("pending-");
   const rollover = task.automatic_move?.kind === "rollover";
   const autoPulled = task.automatic_move?.kind === "auto_pull";
+  const displayDone = isDone && !completing;
 
   return (
-    <article className={`task-card${compact ? " compact" : ""}${isDone ? " done" : ""}${rollover ? " rollover" : ""}`}>
-      {!isDone ? (
+    <article className={`task-card${compact ? " compact" : ""}${displayDone ? " done" : ""}${rollover ? " rollover" : ""}${completing ? " completing" : ""}`}>
+      {!displayDone ? (
         <IconTooltip label="拖曳調整順序或日期">
           <button
             className="drag-handle"
             type="button"
+            autoComplete="off"
             aria-label={`拖曳「${task.title}」`}
-            disabled={disabled || isPending}
+            disabled={disabled || isPending || completing}
             {...dragHandleProps}
           >
             <GripVertical aria-hidden="true" size={17} />
@@ -98,10 +102,10 @@ export function TaskCard({
         <input
           className="task-checkbox"
           type="checkbox"
-          checked={isDone}
-          disabled={disabled || isPending}
+          checked={isDone || completing}
+          disabled={disabled || isPending || completing}
           onChange={() => onToggle(task)}
-          aria-label={isDone ? `重新開啟「${task.title}」` : `完成「${task.title}」`}
+          aria-label={completing ? `正在完成「${task.title}」` : isDone ? `重新開啟「${task.title}」` : `完成「${task.title}」`}
         />
       </label>
       <div className="task-copy">
@@ -116,9 +120,10 @@ export function TaskCard({
         <button
           className={`flex-toggle${task.is_flexible ? " active" : ""}`}
           type="button"
+          autoComplete="off"
           aria-label={task.is_flexible ? `將「${task.title}」設為固定` : `將「${task.title}」設為彈性`}
           aria-pressed={task.is_flexible}
-          disabled={disabled || isPending}
+          disabled={disabled || isPending || completing}
           onClick={() => onToggleFlexible(task)}
         >
           {task.is_flexible ? <Zap aria-hidden="true" size={16} /> : <LockKeyhole aria-hidden="true" size={15} />}
@@ -126,13 +131,13 @@ export function TaskCard({
       </IconTooltip>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
-          <button className="icon-button compact task-menu-trigger" type="button" aria-label={`「${task.title}」更多操作`} disabled={disabled || isPending}>
+          <button className="icon-button compact task-menu-trigger" type="button" autoComplete="off" aria-label={`「${task.title}」更多操作`} disabled={disabled || isPending || completing}>
             <MoreHorizontal aria-hidden="true" size={18} />
           </button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content className="menu-content" align="end" sideOffset={5}>
-            {isDone ? (
+            {displayDone ? (
               <DropdownMenu.Item className="menu-item" onSelect={() => onToggle(task)}>
                 <RotateCcw aria-hidden="true" size={16} />
                 重新開啟
@@ -142,7 +147,7 @@ export function TaskCard({
               <Pencil aria-hidden="true" size={16} />
               編輯
             </DropdownMenu.Item>
-            {!isDone ? (
+            {!displayDone ? (
               <>
                 <DropdownMenu.Separator className="menu-separator" />
                 <DropdownMenu.Item className="menu-item" disabled={index === 0} onSelect={() => onMove(task, "up")}>

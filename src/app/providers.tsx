@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SessionProvider, useSession } from "next-auth/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Info, TriangleAlert, X } from "lucide-react";
+import { ThemeProvider } from "@/components/theme-provider";
 
 type NoticeKind = "success" | "error" | "info";
 
@@ -128,16 +129,18 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   }, [queryClient]);
 
   return (
-    <SessionProvider refetchOnWindowFocus>
-      <QueryClientProvider client={queryClient}>
-        <NoticeContext.Provider value={noticeValue}>
-          <TimezoneContext.Provider value={timezoneReady}>
-            <TimezoneSync onReady={markTimezoneReady} onSignedOut={handleSignedOut} />
-            {children}
-            <NoticeViewport notices={notices} dismiss={dismiss} />
-          </TimezoneContext.Provider>
-        </NoticeContext.Provider>
-      </QueryClientProvider>
-    </SessionProvider>
+    <ThemeProvider>
+      <SessionProvider refetchOnWindowFocus>
+        <QueryClientProvider client={queryClient}>
+          <NoticeContext.Provider value={noticeValue}>
+            <TimezoneContext.Provider value={timezoneReady}>
+              <TimezoneSync onReady={markTimezoneReady} onSignedOut={handleSignedOut} />
+              {children}
+              <NoticeViewport notices={notices} dismiss={dismiss} />
+            </TimezoneContext.Provider>
+          </NoticeContext.Provider>
+        </QueryClientProvider>
+      </SessionProvider>
+    </ThemeProvider>
   );
 }

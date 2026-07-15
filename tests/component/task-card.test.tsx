@@ -52,4 +52,25 @@ describe("TaskCard", () => {
       screen.queryByRole("button", { name: "拖曳「Published report」" }),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps a completing task checked in its source layout", () => {
+    const task = buildTask({
+      title: "Finishing report",
+      status: "done",
+      completed_at: "2026-07-15T02:30:00.000Z",
+    });
+
+    const { container } = render(
+      <TaskCard task={task} index={0} count={1} completing {...callbacks()} />,
+    );
+
+    expect(container.querySelector(".task-card")).toHaveClass("completing");
+    expect(container.querySelector(".task-card")).not.toHaveClass("done");
+    expect(
+      screen.getByRole("checkbox", { name: "正在完成「Finishing report」" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("button", { name: "拖曳「Finishing report」" }),
+    ).toBeDisabled();
+  });
 });

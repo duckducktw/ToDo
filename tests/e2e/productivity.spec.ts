@@ -58,14 +58,34 @@ test("creates, edits, completes, reopens, and deletes a task", async ({
     page.getByRole("heading", { name: "整理最終產品提案" }),
   ).toBeVisible();
 
-  await page
-    .getByRole("checkbox", { name: "完成「整理最終產品提案」" })
-    .click();
-  await page.locator("details.completed-disclosure summary").click();
+  await page.getByRole("checkbox", { name: "完成「整理最終產品提案」" }).click();
+  const completingCard = page.locator(".task-card.completing");
+  await expect(completingCard).toBeVisible();
+  const completionAnimations = await completingCard.locator(".task-checkbox").evaluate((element) =>
+    element.getAnimations().map((animation) => animation instanceof CSSAnimation ? animation.animationName : ""),
+  );
+  expect(completionAnimations).toContain("checkbox-complete");
+
+  const completedDisclosure = page.locator("details.completed-disclosure");
+  const completedSummary = completedDisclosure.locator("summary");
+  await completedSummary.click();
   const todayAccessibility = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
   expect(todayAccessibility.violations).toEqual([]);
+
+  await completedSummary.click();
+  const closingState = await completedDisclosure.evaluate((element) => ({
+    closing: element.classList.contains("closing"),
+    open: (element as HTMLDetailsElement).open,
+    animations: Array.from(element.querySelector(".animated-details-content")?.getAnimations() ?? [])
+      .map((animation) => animation instanceof CSSAnimation ? animation.animationName : ""),
+  }));
+  expect(closingState).toMatchObject({ closing: true, open: true });
+  expect(closingState.animations).toContain("disclosure-out");
+  await expect(completedDisclosure).toHaveJSProperty("open", false, { timeout: 1_000 });
+
+  await completedSummary.click();
   await page
     .getByRole("checkbox", { name: "重新開啟「整理最終產品提案」" })
     .click();

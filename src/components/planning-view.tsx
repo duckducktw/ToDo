@@ -34,6 +34,8 @@ import { IconTooltip } from "@/components/app-shell";
 import { SortableTaskCard, TaskCard, type TaskMoveAction } from "@/components/task-card";
 import { TaskEditorDialog, type TaskEditorValue } from "@/components/task-editor-dialog";
 import { getErrorMessage, useCalendar, useTaskActions, useTasks } from "@/hooks/use-productivity-data";
+import { AnimatedDetails } from "@/components/animated-details";
+import { useCompletionAnimation } from "@/hooks/use-completion-animation";
 
 type PlanningMode = "week" | "month";
 
@@ -71,13 +73,14 @@ interface DayLaneProps {
   timezone: string;
   today: string;
   disabled: boolean;
+  completingIds: ReadonlySet<string>;
   taskProps: Omit<React.ComponentProps<typeof SortableTaskCard>, "task" | "index" | "count">;
   onAdd: (date: string) => void;
 }
 
-function DayLane({ date, tasks, events, timezone, today, disabled, taskProps, onAdd }: DayLaneProps) {
-  const active = tasks.filter((task) => task.status === "todo").sort((a, b) => a.sequence_order - b.sequence_order);
-  const done = tasks.filter((task) => task.status === "done").sort((a, b) => a.sequence_order - b.sequence_order);
+function DayLane({ date, tasks, events, timezone, today, disabled, completingIds, taskProps, onAdd }: DayLaneProps) {
+  const active = tasks.filter((task) => task.status === "todo" || completingIds.has(task.id)).sort((a, b) => a.sequence_order - b.sequence_order);
+  const done = tasks.filter((task) => task.status === "done" && !completingIds.has(task.id)).sort((a, b) => a.sequence_order - b.sequence_order);
   const { setNodeRef, isOver } = useDroppable({ id: `day:${date}`, data: { date } });
   const value = DateTime.fromISO(date).setLocale("zh-TW");
 
@@ -89,7 +92,7 @@ function DayLane({ date, tasks, events, timezone, today, disabled, taskProps, on
           <strong id={`day-${date}`}>{value.day}</strong>
         </div>
         <IconTooltip label={`在 ${value.toFormat("M 月 d 日")}新增待辦`}>
-          <button className="icon-button compact" type="button" onClick={() => onAdd(date)} aria-label={`在 ${value.toFormat("M 月 d 日")}新增待辦`} disabled={disabled}>
+          <button className="icon-button compact" type="button" autoComplete="off" onClick={() => onAdd(date)} aria-label={`在 ${value.toFormat("M 月 d 日")}新增待辦`} disabled={disabled}>
             <Plus aria-hidden="true" size={16} />
           </button>
         </IconTooltip>
@@ -98,18 +101,20 @@ function DayLane({ date, tasks, events, timezone, today, disabled, taskProps, on
       <SortableContext items={active.map((task) => task.id)} strategy={verticalListSortingStrategy}>
         <div className="week-task-stack">
           {active.map((task, index) => (
-            <SortableTaskCard compact key={task.id} task={task} index={index} count={active.length} {...taskProps} />
+            <SortableTaskCard compact key={task.id} task={task} index={index} count={active.length} completing={completingIds.has(task.id)} {...taskProps} />
           ))}
           {active.length === 0 ? <p className="day-empty">尚無待辦</p> : null}
         </div>
       </SortableContext>
       {done.length > 0 ? (
-        <details className="day-completed">
-          <summary><CheckCircle2 aria-hidden="true" size={14} />已完成 {done.length}<ChevronDown aria-hidden="true" size={14} /></summary>
+        <AnimatedDetails
+          className="day-completed"
+          summary={<><CheckCircle2 aria-hidden="true" size={14} />已完成 {done.length}<ChevronDown aria-hidden="true" size={14} /></>}
+        >
           <div className="week-task-stack done-stack">
-            {done.map((task, index) => <TaskCard compact key={task.id} task={task} index={index} count={done.length} {...taskProps} />)}
+            {done.map((task, index) => <TaskCard compact key={task.id} task={task} index={index} count={done.length} completing={completingIds.has(task.id)} {...taskProps} />)}
           </div>
-        </details>
+        </AnimatedDetails>
       ) : null}
     </section>
   );
@@ -123,14 +128,15 @@ interface MonthCellProps {
   tasks: Task[];
   events: CalendarEvent[];
   timezone: string;
+  completingIds: ReadonlySet<string>;
   onSelect: (date: string) => void;
   onAdd: (date: string) => void;
 }
 
-function MonthCell({ date, currentMonth, today, selected, tasks, events, timezone, onSelect, onAdd }: MonthCellProps) {
+function MonthCell({ date, currentMonth, today, selected, tasks, events, timezone, completingIds, onSelect, onAdd }: MonthCellProps) {
   const { setNodeRef, isOver } = useDroppable({ id: `day:${date}`, data: { date } });
   const value = DateTime.fromISO(date).setLocale("zh-TW");
-  const active = tasks.filter((task) => task.status === "todo").sort((a, b) => a.sequence_order - b.sequence_order);
+  const active = tasks.filter((task) => task.status === "todo" || completingIds.has(task.id)).sort((a, b) => a.sequence_order - b.sequence_order);
   const matchingEvents = events.filter((event) => {
     if (event.is_all_day) return event.start <= date && event.end > date;
     const start = DateTime.fromISO(event.start, { setZone: true }).setZone(timezone).toISODate();
@@ -174,10 +180,12 @@ export function PlanningView() {
   const taskQuery = useTasks(from, to);
   const calendarQuery = useCalendar(from, to);
   const actions = useTaskActions();
+  const completion = useCompletionAnimation();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editorDate, setEditorDate] = useState(anchorDate);
   const [dragAnnouncement, setDragAnnouncement] = useState("");
+  const taskActionsDisabled = actions.isPending || completion.completionActive;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -193,8 +201,8 @@ export function PlanningView() {
     return result;
   }, [taskQuery.data?.tasks]);
   const allActive = useMemo(
-    () => (taskQuery.data?.tasks ?? []).filter((task) => task.status === "todo"),
-    [taskQuery.data?.tasks],
+    () => (taskQuery.data?.tasks ?? []).filter((task) => task.status === "todo" || completion.completingIds.has(task.id)),
+    [completion.completingIds, taskQuery.data?.tasks],
   );
 
   function updateUrl(nextMode: PlanningMode, nextDate: string) {
@@ -222,17 +230,17 @@ export function PlanningView() {
   }
 
   async function submitTask(value: TaskEditorValue) {
-    if (!taskQuery.data || actions.isPending) return;
+    if (!taskQuery.data || taskActionsDisabled) return;
     if (editingTask) await actions.updateTask(editingTask.id, value, taskQuery.data.revision);
     else await actions.createTask(value, taskQuery.data.revision);
   }
 
   function activeForDate(date: string) {
-    return (tasksByDate[date] ?? []).filter((task) => task.status === "todo").sort((a, b) => a.sequence_order - b.sequence_order);
+    return (tasksByDate[date] ?? []).filter((task) => task.status === "todo" || completion.completingIds.has(task.id)).sort((a, b) => a.sequence_order - b.sequence_order);
   }
 
   function moveTask(task: Task, action: TaskMoveAction) {
-    if (!taskQuery.data || actions.isPending) return;
+    if (!taskQuery.data || taskActionsDisabled) return;
     if (action === "date") {
       openEdit(task);
       return;
@@ -260,7 +268,7 @@ export function PlanningView() {
 
   function handleDragEnd(event: DragEndEvent) {
     const task = allActive.find((candidate) => candidate.id === event.active.id);
-    if (!task || !event.over || !taskQuery.data || actions.isPending) return;
+    if (!task || !event.over || !taskQuery.data || taskActionsDisabled) return;
     let destinationDate: string;
     let destinationIndex: number;
     const overId = String(event.over.id);
@@ -280,15 +288,17 @@ export function PlanningView() {
   }
 
   const taskProps = {
-    disabled: actions.isPending,
+    disabled: taskActionsDisabled,
     onToggle: (task: Task) => {
-      if (taskQuery.data && !actions.isPending) void actions.updateTask(task.id, { status: task.status === "done" ? "todo" : "done" }, taskQuery.data.revision).catch(() => undefined);
+      if (!taskQuery.data || taskActionsDisabled) return;
+      if (task.status === "todo" && !completion.startCompletion(task.id)) return;
+      void actions.updateTask(task.id, { status: task.status === "done" ? "todo" : "done" }, taskQuery.data.revision).catch(() => undefined);
     },
     onToggleFlexible: (task: Task) => {
-      if (taskQuery.data && !actions.isPending) void actions.updateTask(task.id, { is_flexible: !task.is_flexible }, taskQuery.data.revision).catch(() => undefined);
+      if (taskQuery.data && !taskActionsDisabled) void actions.updateTask(task.id, { is_flexible: !task.is_flexible }, taskQuery.data.revision).catch(() => undefined);
     },
     onEdit: openEdit,
-    onDelete: (task: Task) => taskQuery.data && !actions.isPending ? actions.deleteTask(task, taskQuery.data.revision) : Promise.resolve(),
+    onDelete: (task: Task) => taskQuery.data && !taskActionsDisabled ? actions.deleteTask(task, taskQuery.data.revision) : Promise.resolve(),
     onMove: moveTask,
   };
 
@@ -298,8 +308,8 @@ export function PlanningView() {
   const calendarEvents = calendarQuery.data?.events ?? [];
   const calendarTimezone = calendarQuery.data?.timezone ?? taskQuery.data?.timezone ?? "Asia/Taipei";
   const selectedTasks = tasksByDate[anchorDate] ?? [];
-  const selectedActive = selectedTasks.filter((task) => task.status === "todo").sort((a, b) => a.sequence_order - b.sequence_order);
-  const selectedDone = selectedTasks.filter((task) => task.status === "done").sort((a, b) => a.sequence_order - b.sequence_order);
+  const selectedActive = selectedTasks.filter((task) => task.status === "todo" || completion.completingIds.has(task.id)).sort((a, b) => a.sequence_order - b.sequence_order);
+  const selectedDone = selectedTasks.filter((task) => task.status === "done" && !completion.completingIds.has(task.id)).sort((a, b) => a.sequence_order - b.sequence_order);
 
   return (
     <div className="planning-page page-container wide">
@@ -308,7 +318,7 @@ export function PlanningView() {
           <span className="eyebrow">全局安排</span>
           <h1>規劃</h1>
         </div>
-        <button className="button primary" type="button" onClick={() => openCreate(anchorDate)} disabled={!taskQuery.data || actions.isPending}>
+        <button className="button primary" type="button" autoComplete="off" onClick={() => openCreate(anchorDate)} disabled={!taskQuery.data || taskActionsDisabled}>
           <Plus aria-hidden="true" size={18} />新增待辦
         </button>
       </header>
@@ -333,7 +343,7 @@ export function PlanningView() {
       {calendarQuery.isPending ? <div className="planning-calendar-status"><CalendarSkeleton compact /></div> : null}
       {calendarQuery.isError ? <CalendarError compact error={calendarQuery.error} onRetry={() => void calendarQuery.refetch()} /> : null}
 
-      {taskQuery.isPending ? <div className="planning-skeleton" aria-label="正在載入規劃"><span /><span /><span /><span /><span /><span /><span /></div> : null}
+      {taskQuery.isPending ? <div className="planning-skeleton" role="status" aria-label="正在載入規劃"><span /><span /><span /><span /><span /><span /><span /></div> : null}
       {taskQuery.isError ? (
         <div className="state-panel error-state planning-error" role="alert">
           <span className="state-icon"><TriangleAlert aria-hidden="true" size={21} /></span>
@@ -354,7 +364,8 @@ export function PlanningView() {
                   events={calendarEvents}
                   timezone={calendarTimezone}
                   today={taskQuery.data!.today}
-                  disabled={actions.isPending}
+                  disabled={taskActionsDisabled}
+                  completingIds={completion.completingIds}
                   taskProps={taskProps}
                   onAdd={openCreate}
                 />
@@ -374,6 +385,7 @@ export function PlanningView() {
                     tasks={tasksByDate[date] ?? []}
                     events={calendarEvents}
                     timezone={calendarTimezone}
+                    completingIds={completion.completingIds}
                     onSelect={(selected) => updateUrl("month", selected)}
                     onAdd={openCreate}
                   />
@@ -391,14 +403,16 @@ export function PlanningView() {
                   <div className="month-agenda-tasks">
                     <SortableContext items={selectedActive.map((task) => task.id)} strategy={verticalListSortingStrategy}>
                       <div className="task-stack">
-                        {selectedActive.map((task, index) => <SortableTaskCard key={task.id} task={task} index={index} count={selectedActive.length} {...taskProps} />)}
+                        {selectedActive.map((task, index) => <SortableTaskCard key={task.id} task={task} index={index} count={selectedActive.length} completing={completion.completingIds.has(task.id)} {...taskProps} />)}
                       </div>
                     </SortableContext>
                     {selectedDone.length > 0 ? (
-                      <details className="completed-disclosure">
-                        <summary><span><CheckCircle2 aria-hidden="true" size={17} />已完成</span><span>{selectedDone.length}<ChevronDown aria-hidden="true" size={17} /></span></summary>
-                        <div className="task-stack completed-stack">{selectedDone.map((task, index) => <TaskCard key={task.id} task={task} index={index} count={selectedDone.length} {...taskProps} />)}</div>
-                      </details>
+                      <AnimatedDetails
+                        className="completed-disclosure"
+                        summary={<><span><CheckCircle2 aria-hidden="true" size={17} />已完成</span><span>{selectedDone.length}<ChevronDown className="disclosure-chevron" aria-hidden="true" size={17} /></span></>}
+                      >
+                        <div className="task-stack completed-stack">{selectedDone.map((task, index) => <TaskCard key={task.id} task={task} index={index} count={selectedDone.length} completing={completion.completingIds.has(task.id)} {...taskProps} />)}</div>
+                      </AnimatedDetails>
                     ) : null}
                     {selectedTasks.length === 0 ? <div className="agenda-empty"><CalendarRange aria-hidden="true" size={22} /><span>這天還沒有待辦</span></div> : null}
                   </div>

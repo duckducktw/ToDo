@@ -57,4 +57,20 @@ test("captures the populated Today and month-planning surfaces", async ({
     fullPage: true,
     animations: "disabled",
   });
+
+  await page.getByRole("switch", { name: "深色模式" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.screenshot({
+    path: testInfo.outputPath("planning-month-dark.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "確認季度報告數據" })).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("today-dark.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
 });

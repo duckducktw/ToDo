@@ -21,10 +21,10 @@ Tasks are stored as isolated JSON files per Google account. Google Calendar even
    npm install
    ```
 
-   To run browser tests, install Chromium once:
+   To run browser tests, install Chromium and Firefox once:
 
    ```bash
-   npx playwright install chromium
+   npx playwright install chromium firefox
    ```
 
 2. Create the local environment file:
@@ -97,6 +97,8 @@ This JSON store is intentionally designed for a single local Node.js process. Pl
 ## Behavior
 
 - Dates are interpreted in each user's browser-reported IANA timezone, with `Asia/Taipei` as the initial fallback.
+- The interface follows the device light/dark preference until the user chooses a theme; that explicit choice persists in the browser.
+- Interface motion is reduced automatically when the device requests reduced motion.
 - Loading Today, returning to a visible tab, or crossing a local-day boundary rolls every overdue incomplete task forward to today. Flexible and locked tasks both roll over.
 - Completing the last active task today pulls at most three future flexible tasks into today. Completing that batch can pull another batch.
 - Google Calendar is always read-only. Calendar failures do not block task operations.
@@ -137,4 +139,4 @@ Task mutations send the current revision in `If-Match`. A `412` response means a
 
 ## Current scope
 
-The project targets localhost and a single primary Google Calendar. Calendar writes, reminders, sharing, subtasks, analytics, offline mode, dark mode, localization beyond Traditional Chinese, Docker, and hosted production deployment are intentionally out of scope.
+The project targets localhost and a single primary Google Calendar. Calendar writes, reminders, sharing, subtasks, analytics, offline mode, localization beyond Traditional Chinese, Docker, and hosted production deployment are intentionally out of scope.

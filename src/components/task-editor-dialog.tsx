@@ -139,7 +139,7 @@ function TaskEditorForm({ onOpenChange, task, defaultDate, onSubmit, description
             {error ? <p className="form-error" role="alert">{error}</p> : null}
             <div className="dialog-actions">
               <Dialog.Close className="button secondary" type="button">取消</Dialog.Close>
-              <button className="button primary" type="submit" disabled={submitting}>
+              <button className="button primary" type="submit" autoComplete="off" disabled={submitting}>
                 {submitting ? "儲存中…" : task ? "儲存變更" : "加入待辦"}
               </button>
             </div>

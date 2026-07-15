@@ -7,6 +7,7 @@ import { signOut, useSession } from "next-auth/react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { CalendarDays, CheckCheck, Focus, LogOut, MoreVertical } from "lucide-react";
+import { ThemeSwitch } from "@/components/theme-switch";
 
 export function IconTooltip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -86,7 +87,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               安排
             </Link>
           </nav>
-          <AccountMenu />
+          <div className="topbar-actions">
+            <ThemeSwitch />
+            <AccountMenu />
+          </div>
         </div>
       </header>
       <main className="main-content">{children}</main>

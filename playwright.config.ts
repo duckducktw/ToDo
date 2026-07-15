@@ -43,6 +43,11 @@ export default defineConfig({
       name: "mobile-chromium",
       use: { ...devices["Pixel 7"], viewport: { width: 390, height: 844 } },
     },
+    {
+      name: "desktop-firefox",
+      testMatch: /hydration\.spec\.ts/,
+      use: { ...devices["Desktop Firefox"], viewport: { width: 1440, height: 900 } },
+    },
   ],
   webServer: {
     command: `npm run dev -- --hostname ${listenHost} --port ${port}`,
