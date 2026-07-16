@@ -24,3 +24,18 @@ test("redirects signed-out pages and protects task APIs", async ({ page }) => {
     },
   });
 });
+
+test("keeps install metadata and icons public", async ({ request }) => {
+  const manifestResponse = await request.get("/manifest.webmanifest");
+  expect(manifestResponse.status()).toBe(200);
+  expect(manifestResponse.headers()["content-type"]).toContain("application/manifest+json");
+  await expect(manifestResponse.json()).resolves.toMatchObject({
+    name: "流動待辦",
+    display: "standalone",
+    start_url: "/",
+  });
+
+  const iconResponse = await request.get("/icons/icon-192.png");
+  expect(iconResponse.status()).toBe(200);
+  expect(iconResponse.headers()["content-type"]).toContain("image/png");
+});
