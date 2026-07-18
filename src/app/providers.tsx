@@ -5,6 +5,7 @@ import { SessionProvider, useSession } from "next-auth/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Info, TriangleAlert, X } from "lucide-react";
 import { ThemeProvider } from "@/components/theme-provider";
+import { handleUnauthorizedResponse } from "@/lib/client-session";
 
 type NoticeKind = "success" | "error" | "info";
 
@@ -58,8 +59,11 @@ function TimezoneSync({
       body: JSON.stringify({ timezone }),
       signal: controller.signal,
     })
-      .catch(() => undefined)
-      .finally(() => {
+      .then(async (response) => {
+        if (await handleUnauthorizedResponse(response)) return;
+        if (!controller.signal.aborted) onReady();
+      })
+      .catch(() => {
         if (!controller.signal.aborted) onReady();
       });
 

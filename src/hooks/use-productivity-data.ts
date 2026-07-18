@@ -9,6 +9,7 @@ import type {
   TaskRangeResponse,
 } from "@/types/domain";
 import { useNotice, useTimezoneReady } from "@/app/providers";
+import { handleUnauthorizedResponse } from "@/lib/client-session";
 
 export class ApiError extends Error {
   code: string;
@@ -25,10 +26,7 @@ export class ApiError extends Error {
 async function parseResponse<T>(response: Response): Promise<T> {
   if (response.ok) return (await response.json()) as T;
 
-  if (response.status === 401 && typeof window !== "undefined") {
-    const callbackUrl = `${window.location.pathname}${window.location.search}`;
-    window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
-  }
+  await handleUnauthorizedResponse(response);
 
   let payload: ApiErrorPayload | null = null;
   try {
@@ -149,7 +147,6 @@ export function useTaskActions() {
         void client.invalidateQueries({ queryKey: ["tasks"] });
       } else if (apiError.status === 401) {
         notify("登入狀態已失效，請重新登入", "error");
-        window.location.assign("/login");
       } else {
         notify(apiError.message, "error");
       }
