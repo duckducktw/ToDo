@@ -159,8 +159,20 @@ a {
 
 button:not(:disabled),
 summary,
-a {
+a,
+.menu-item:not([data-disabled]) {
   cursor: pointer;
+}
+
+button,
+summary,
+a,
+.menu-item {
+  user-select: none;
+}
+
+.menu-item[data-disabled] {
+  cursor: not-allowed;
 }
 
 button:disabled {

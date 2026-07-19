@@ -13,6 +13,8 @@ export interface Task {
   description: string;
   status: TaskStatus;
   scheduled_date: string;
+  /** Response-only date used when a task is previewed in Today Focus. */
+  display_date?: string;
   is_flexible: boolean;
   sequence_order: number;
   origin_date: string;

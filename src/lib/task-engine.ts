@@ -263,26 +263,57 @@ export function autoPullTasks(
   };
 }
 
-/** Prepares today's list for an API request: overdue work takes precedence;
- * otherwise the nearest future batch of flexible work is shown today. */
-export function prepareTodayTasks(
+/** Builds the response-only Today Focus projection without changing scheduling. */
+export function projectTodayFocus(
   tasks: readonly Task[],
   today: string,
-  movedAt: string = new Date().toISOString(),
-): TaskOperationResult {
-  const rolledOver = rolloverTasks(tasks, today, movedAt);
-  if (rolledOver.changed) {
-    return rolledOver;
+  projectedAt: string = new Date().toISOString(),
+  limit = 3,
+): Task[] {
+  const todayTasks = normalizeTasks(
+    tasks.filter((task) => task.scheduled_date === today),
+  );
+  const hasCurrentWork = tasks.some(
+    (task) => task.status === "todo" && task.scheduled_date <= today,
+  );
+  if (hasCurrentWork || limit <= 0) {
+    return todayTasks;
   }
 
-  return autoPullTasks(rolledOver.tasks, today, movedAt);
+  const eligible = tasks
+    .filter(
+      (task) =>
+        task.status === "todo" &&
+        task.is_flexible &&
+        task.scheduled_date > today,
+    )
+    .sort(
+      (left, right) =>
+        left.scheduled_date.localeCompare(right.scheduled_date) ||
+        compareStable(left, right),
+    );
+  const nearestDate = eligible[0]?.scheduled_date;
+  const previews = eligible
+    .filter((task) => task.scheduled_date === nearestDate)
+    .slice(0, limit)
+    .map((task) => ({
+      ...task,
+      display_date: today,
+      automatic_move: {
+        kind: "auto_pull" as const,
+        from_date: task.scheduled_date,
+        moved_at: projectedAt,
+      },
+    }));
+
+  return [...previews, ...todayTasks];
 }
 
 export function patchTask(
   tasks: readonly Task[],
   taskId: string,
   input: PatchTaskInput,
-  today: string,
+  _today: string,
   now: string = new Date().toISOString(),
 ): TaskOperationResult {
   const existing = tasks.find((task) => task.id === taskId);
@@ -348,30 +379,16 @@ export function patchTask(
   }
 
   patched.updated_at = now;
-  let nextTasks = normalizeTasks(
+  const nextTasks = normalizeTasks(
     tasks.map((task) => (task.id === taskId ? patched : { ...task })),
   );
   const affectedDates = [existing.scheduled_date, patched.scheduled_date];
-  const isRealTodayCompletion =
-    existing.status === "todo" &&
-    existing.scheduled_date === today &&
-    patched.status === "done" &&
-    patched.scheduled_date === today;
-  let autoPulledIds: string[] = [];
-
-  if (isRealTodayCompletion) {
-    const pulled = autoPullTasks(nextTasks, today, now);
-    nextTasks = pulled.tasks;
-    affectedDates.push(...pulled.affectedDates);
-    autoPulledIds = pulled.autoPulledIds;
-  }
-
   return {
     tasks: nextTasks,
     changed: true,
     affectedDates: uniqueDates(affectedDates),
     rolledOverIds: [],
-    autoPulledIds,
+    autoPulledIds: [],
   };
 }
 

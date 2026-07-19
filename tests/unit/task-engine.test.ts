@@ -5,7 +5,7 @@ import {
   autoPullTasks,
   normalizeTasks,
   patchTask,
-  prepareTodayTasks,
+  projectTodayFocus,
   reorderTask,
   rolloverTasks,
 } from "@/lib/task-engine";
@@ -208,18 +208,18 @@ describe("autoPullTasks", () => {
   });
 });
 
-describe("prepareTodayTasks", () => {
-  it("pulls tomorrow's flexible work when past and today have no active work", () => {
+describe("projectTodayFocus", () => {
+  it("previews tomorrow's flexible work without changing its scheduled date", () => {
     const tomorrow = task(1, {
       scheduled_date: "2026-07-16",
       origin_date: "2026-07-16",
     });
 
-    const result = prepareTodayTasks([tomorrow], TODAY, NOW);
+    const result = projectTodayFocus([tomorrow], TODAY, NOW);
 
-    expect(result.autoPulledIds).toEqual([tomorrow.id]);
-    expect(result.tasks[0]).toMatchObject({
-      scheduled_date: TODAY,
+    expect(result[0]).toMatchObject({
+      scheduled_date: "2026-07-16",
+      display_date: TODAY,
       automatic_move: { kind: "auto_pull", from_date: "2026-07-16" },
     });
   });
@@ -230,13 +230,13 @@ describe("prepareTodayTasks", () => {
       origin_date: "2026-07-17",
     });
 
-    const result = prepareTodayTasks([dayAfterTomorrow], TODAY, NOW);
+    const result = projectTodayFocus([dayAfterTomorrow], TODAY, NOW);
 
-    expect(result.autoPulledIds).toEqual([dayAfterTomorrow.id]);
-    expect(result.tasks[0]?.automatic_move?.from_date).toBe("2026-07-17");
+    expect(result[0]?.automatic_move?.from_date).toBe("2026-07-17");
+    expect(result[0]?.scheduled_date).toBe("2026-07-17");
   });
 
-  it("rolls overdue work first and does not also pull future work", () => {
+  it("does not preview future work while overdue work remains", () => {
     const overdue = task(1, {
       scheduled_date: "2026-07-14",
       origin_date: "2026-07-14",
@@ -246,17 +246,14 @@ describe("prepareTodayTasks", () => {
       origin_date: "2026-07-16",
     });
 
-    const result = prepareTodayTasks([overdue, tomorrow], TODAY, NOW);
+    const result = projectTodayFocus([overdue, tomorrow], TODAY, NOW);
 
-    expect(result.rolledOverIds).toEqual([overdue.id]);
-    expect(result.autoPulledIds).toEqual([]);
-    expect(result.tasks.find(({ id }) => id === tomorrow.id)?.scheduled_date)
-      .toBe("2026-07-16");
+    expect(result).toEqual([]);
   });
 });
 
 describe("patchTask completion transitions", () => {
-  it("pulls another repeatable batch only after the current batch is complete", () => {
+  it("does not persistently move future tasks after today's work is complete", () => {
     const todayTask = task(1);
     const futures = [2, 3, 4, 5].map((number, index) =>
       task(number, {
@@ -272,31 +269,13 @@ describe("patchTask completion transitions", () => {
       TODAY,
       NOW,
     );
-    expect(firstCompletion.autoPulledIds).toEqual(
-      futures.slice(0, 3).map(({ id }) => id),
-    );
-
-    let current = firstCompletion.tasks;
-    for (const pulled of futures.slice(0, 2)) {
-      const completion = patchTask(
-        current,
-        pulled.id,
-        { status: "done" },
-        TODAY,
-        NOW,
-      );
-      expect(completion.autoPulledIds).toEqual([]);
-      current = completion.tasks;
-    }
-    const finalCompletion = patchTask(
-      current,
-      futures[2]!.id,
-      { status: "done" },
-      TODAY,
-      NOW,
-    );
-
-    expect(finalCompletion.autoPulledIds).toEqual([futures[3]!.id]);
+    expect(firstCompletion.autoPulledIds).toEqual([]);
+    expect(
+      firstCompletion.tasks
+        .filter(({ id }) => futures.some((future) => future.id === id))
+        .map(({ scheduled_date }) => scheduled_date),
+    ).toEqual(["2026-07-16", "2026-07-16", "2026-07-16", "2026-07-17"]);
+    expect(projectTodayFocus(firstCompletion.tasks, TODAY, NOW)).toHaveLength(4);
   });
 
   it("does not pull for duplicate or future completion requests", () => {

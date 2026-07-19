@@ -37,12 +37,13 @@ async function parseResponse<T>(response: Response): Promise<T> {
   throw new ApiError(payload?.error.message ?? "伺服器暫時無法完成要求", payload?.error.code, response.status);
 }
 
-export function useTasks(from: string, to: string) {
+export function useTasks(from: string, to: string, focusToday = false) {
   const timezoneReady = useTimezoneReady();
   return useQuery({
-    queryKey: ["tasks", from, to],
+    queryKey: ["tasks", from, to, focusToday],
     queryFn: async ({ signal }) => {
       const params = new URLSearchParams({ from, to });
+      if (focusToday) params.set("focus", "today");
       const response = await fetch(`/api/tasks?${params}`, { cache: "no-store", signal });
       return parseResponse<TaskRangeResponse>(response);
     },
@@ -66,17 +67,18 @@ export function useCalendar(from: string, to: string) {
 function replaceAffectedDates(client: QueryClient, result: TaskMutationResponse) {
   client.getQueriesData<TaskRangeResponse>({ queryKey: ["tasks"] }).forEach(([key, current]) => {
     if (!current) return;
-    const [, from, to] = key as [string, string, string];
+    const [, from, to] = key as [string, string, string, boolean?];
+    const taskDate = (task: Task) => task.display_date ?? task.scheduled_date;
     const affected = new Set(result.affected_dates);
     const replacement = Object.values(result.tasks_by_date)
       .flat()
-      .filter((task) => task.scheduled_date >= from && task.scheduled_date <= to);
+      .filter((task) => taskDate(task) >= from && taskDate(task) <= to);
     client.setQueryData<TaskRangeResponse>(key, {
       ...current,
       revision: result.revision,
       tasks: [
         ...current.tasks.filter(
-          (task) => !affected.has(task.scheduled_date) && task.scheduled_date >= from && task.scheduled_date <= to,
+          (task) => !affected.has(task.scheduled_date) && taskDate(task) >= from && taskDate(task) <= to,
         ),
         ...replacement,
       ],
@@ -117,11 +119,14 @@ export function useTaskActions() {
       if (input.optimistic) {
         snapshots.forEach(([key, current]) => {
           if (!current) return;
-          const [, from, to] = key as [string, string, string];
+          const [, from, to] = key as [string, string, string, boolean?];
           client.setQueryData<TaskRangeResponse>(key, {
             ...current,
             tasks: input.optimistic!(current.tasks).filter(
-              (task) => task.scheduled_date >= from && task.scheduled_date <= to,
+              (task) => {
+                const date = task.display_date ?? task.scheduled_date;
+                return date >= from && date <= to;
+              },
             ),
           });
         });
@@ -138,6 +143,7 @@ export function useTaskActions() {
       if (result.auto_pulled_ids.length > 0) {
         notify(`已從未來安排中帶入 ${result.auto_pulled_ids.length} 項彈性待辦`, "info");
       }
+      void client.invalidateQueries({ queryKey: ["tasks"] });
     },
     onError: (error, _input, context) => {
       context?.snapshots.forEach(([key, value]) => client.setQueryData(key, value));

@@ -48,7 +48,7 @@ export function TodayView() {
   const [dragAnnouncement, setDragAnnouncement] = useState("");
   const [rolloverReady, setRolloverReady] = useState(false);
   const timezoneReady = useTimezoneReady();
-  const query = useTasks(date, date);
+  const query = useTasks(date, date, true);
   const actions = useTaskActions();
   const completion = useCompletionAnimation();
   const rolloverDateRef = useRef<string | null>(null);
