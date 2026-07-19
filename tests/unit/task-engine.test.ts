@@ -5,6 +5,7 @@ import {
   autoPullTasks,
   normalizeTasks,
   patchTask,
+  projectPlanningRange,
   projectTodayFocus,
   reorderTask,
   rolloverTasks,
@@ -118,6 +119,27 @@ describe("rolloverTasks", () => {
     expect(second.changed).toBe(false);
     expect(second.rolledOverIds).toEqual([]);
     expect(second.tasks).toEqual(first.tasks);
+  });
+});
+
+describe("projectPlanningRange", () => {
+  it("shows rolled-over work on its original date without changing Today scheduling", () => {
+    const rolled = task(1, {
+      scheduled_date: TODAY,
+      origin_date: "2026-07-12",
+      rollover_count: 3,
+      automatic_move: {
+        kind: "rollover",
+        from_date: "2026-07-14",
+        moved_at: NOW,
+      },
+    });
+
+    const planning = projectPlanningRange([rolled], "2026-07-12", "2026-07-12");
+
+    expect(planning).toEqual([{ ...rolled, display_date: "2026-07-12" }]);
+    expect(projectTodayFocus([rolled], TODAY)).toEqual([rolled]);
+    expect(rolled.scheduled_date).toBe(TODAY);
   });
 });
 

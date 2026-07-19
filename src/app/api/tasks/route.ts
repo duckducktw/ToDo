@@ -2,8 +2,8 @@ import { apiHandler, jsonResponse, parseExpectedRevision, parseJson, taskMutatio
 import { requireApiUser } from "@/lib/auth-user";
 import { todayInTimezone } from "@/lib/date";
 import { createTaskInputSchema, dateRangeQuerySchema } from "@/lib/schemas";
-import { mutateTaskStore, readTaskRange, readTaskStore } from "@/lib/store";
-import { createTask, projectTodayFocus } from "@/lib/task-engine";
+import { mutateTaskStore, readTaskStore } from "@/lib/store";
+import { createTask, projectPlanningRange, projectTodayFocus } from "@/lib/task-engine";
 import type { TaskRangeResponse } from "@/types/domain";
 
 export async function GET(request: Request): Promise<Response> {
@@ -21,7 +21,10 @@ export async function GET(request: Request): Promise<Response> {
           revision: document.revision,
           tasks: projectTodayFocus(document.tasks, today),
         }))
-      : await readTaskRange(user.id, range.from, range.to);
+      : await readTaskStore(user.id).then((document) => ({
+          revision: document.revision,
+          tasks: projectPlanningRange(document.tasks, range.from, range.to),
+        }));
     const payload: TaskRangeResponse = {
       tasks: result.tasks,
       revision: result.revision,

@@ -309,6 +309,25 @@ export function projectTodayFocus(
   return [...previews, ...todayTasks];
 }
 
+/** Builds a response-only Planning projection that keeps rollover tasks on
+ * their original calendar date while Today Focus uses their scheduled date. */
+export function projectPlanningRange(
+  tasks: readonly Task[],
+  from: string,
+  to: string,
+): Task[] {
+  return normalizeTasks(tasks)
+    .map((task) =>
+      task.automatic_move?.kind === "rollover"
+        ? { ...task, display_date: task.origin_date }
+        : task,
+    )
+    .filter((task) => {
+      const date = task.display_date ?? task.scheduled_date;
+      return date >= from && date <= to;
+    });
+}
+
 export function patchTask(
   tasks: readonly Task[],
   taskId: string,

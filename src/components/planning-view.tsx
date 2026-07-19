@@ -39,9 +39,13 @@ import { useCompletionAnimation } from "@/hooks/use-completion-animation";
 
 type PlanningMode = "week" | "month";
 
+function planningDate(task: Task) {
+  return task.display_date ?? task.scheduled_date;
+}
+
 const planningCollisionDetection: CollisionDetection = (arguments_) => {
   const activeTask = arguments_.active.data.current?.task as Task | undefined;
-  const sourceDayId = activeTask ? `day:${activeTask.scheduled_date}` : null;
+  const sourceDayId = activeTask ? `day:${planningDate(activeTask)}` : null;
   const destinationDay = pointerWithin(arguments_).find(
     (collision) =>
       String(collision.id).startsWith("day:") &&
@@ -196,7 +200,7 @@ export function PlanningView() {
   const tasksByDate = useMemo(() => {
     const result: Record<string, Task[]> = {};
     taskQuery.data?.tasks.forEach((task) => {
-      (result[task.scheduled_date] ??= []).push(task);
+      (result[planningDate(task)] ??= []).push(task);
     });
     return result;
   }, [taskQuery.data?.tasks]);
@@ -225,7 +229,7 @@ export function PlanningView() {
 
   function openEdit(task: Task) {
     setEditingTask(task);
-    setEditorDate(task.scheduled_date);
+    setEditorDate(planningDate(task));
     setEditorOpen(true);
   }
 
@@ -246,18 +250,19 @@ export function PlanningView() {
       return;
     }
     if (action === "previous-day" || action === "next-day") {
-      const destination = DateTime.fromISO(task.scheduled_date).plus({ days: action === "previous-day" ? -1 : 1 }).toISODate();
+      const destination = DateTime.fromISO(planningDate(task)).plus({ days: action === "previous-day" ? -1 : 1 }).toISODate();
       if (destination) {
         const destinationIndex = activeForDate(destination).length;
         void actions.reorderTask(task, destination, destinationIndex, taskQuery.data.revision).catch(() => undefined);
       }
       return;
     }
-    const current = activeForDate(task.scheduled_date);
+    const currentDate = planningDate(task);
+    const current = activeForDate(currentDate);
     const index = current.findIndex((candidate) => candidate.id === task.id);
     const destinationIndex = action === "up" ? index - 1 : index + 1;
     if (destinationIndex >= 0 && destinationIndex < current.length) {
-      void actions.reorderTask(task, task.scheduled_date, destinationIndex, taskQuery.data.revision).catch(() => undefined);
+      void actions.reorderTask(task, currentDate, destinationIndex, taskQuery.data.revision).catch(() => undefined);
     }
   }
 
@@ -278,11 +283,11 @@ export function PlanningView() {
     } else {
       const overTask = allActive.find((candidate) => candidate.id === event.over?.id);
       if (!overTask) return;
-      destinationDate = overTask.scheduled_date;
+      destinationDate = planningDate(overTask);
       destinationIndex = activeForDate(destinationDate).findIndex((candidate) => candidate.id === overTask.id);
       if (destinationIndex < 0) destinationIndex = 0;
     }
-    if (destinationDate === task.scheduled_date && activeForDate(destinationDate).findIndex((candidate) => candidate.id === task.id) === destinationIndex) return;
+    if (destinationDate === planningDate(task) && activeForDate(destinationDate).findIndex((candidate) => candidate.id === task.id) === destinationIndex) return;
     setDragAnnouncement(`${task.title} 已移到 ${DateTime.fromISO(destinationDate).setLocale("zh-TW").toFormat("M 月 d 日")}第 ${destinationIndex + 1} 位`);
     void actions.reorderTask(task, destinationDate, destinationIndex, taskQuery.data.revision).catch(() => undefined);
   }
