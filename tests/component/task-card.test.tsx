@@ -73,4 +73,19 @@ describe("TaskCard", () => {
       screen.getByRole("button", { name: "拖曳「Finishing report」" }),
     ).toBeDisabled();
   });
+
+  it("labels auto-pulled work with its original scheduled date", () => {
+    const task = buildTask({
+      scheduled_date: "2026-07-15",
+      automatic_move: {
+        kind: "auto_pull",
+        from_date: "2026-07-17",
+        moved_at: "2026-07-15T02:30:00.000Z",
+      },
+    });
+
+    render(<TaskCard task={task} index={0} count={1} {...callbacks()} />);
+
+    expect(screen.getByText("提前・7 月 17 日")).toBeInTheDocument();
+  });
 });

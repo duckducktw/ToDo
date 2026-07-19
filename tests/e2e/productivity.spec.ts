@@ -140,7 +140,7 @@ test("rolls overdue work forward and auto-pulls the next flexible task", async (
   await page.getByRole("checkbox", { name: "完成「今日收尾任務」" }).click();
 
   await expect(page.getByRole("heading", { name: "明日彈性任務" })).toBeVisible();
-  await expect(page.getByText("提前帶入")).toBeVisible();
+  await expect(page.getByText(/提前・\d+ 月 \d+ 日/)).toBeVisible();
 });
 
 test("week and month planning views are responsive and pass WCAG AA smoke", async ({

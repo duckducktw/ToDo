@@ -4,6 +4,7 @@ import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { DateTime } from "luxon";
 import {
   ArrowDown,
   ArrowLeft,
@@ -80,6 +81,11 @@ export function TaskCard({
   const isPending = task.id.startsWith("pending-");
   const rollover = task.automatic_move?.kind === "rollover";
   const autoPulled = task.automatic_move?.kind === "auto_pull";
+  const autoPulledDate = autoPulled
+    ? DateTime.fromISO(task.automatic_move!.from_date)
+        .setLocale("zh-TW")
+        .toFormat("M 月 d 日")
+    : null;
   const displayDone = isDone && !completing;
 
   return (
@@ -112,7 +118,7 @@ export function TaskCard({
         <div className="task-title-row">
           <h3>{task.title}</h3>
           {rollover ? <span className="task-badge rollover-badge">延遲 {task.rollover_count > 1 ? `${task.rollover_count} 天` : ""}</span> : null}
-          {autoPulled ? <span className="task-badge pulled-badge">提前帶入</span> : null}
+          {autoPulled ? <span className="task-badge pulled-badge">提前・{autoPulledDate}</span> : null}
         </div>
         {!compact && task.description ? <p>{task.description}</p> : null}
       </div>

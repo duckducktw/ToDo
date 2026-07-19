@@ -197,7 +197,7 @@ export function autoPullTasks(
     };
   }
 
-  const candidates = tasks
+  const eligible = tasks
     .filter(
       (task) =>
         task.status === "todo" &&
@@ -208,7 +208,10 @@ export function autoPullTasks(
       (left, right) =>
         left.scheduled_date.localeCompare(right.scheduled_date) ||
         compareStable(left, right),
-    )
+    );
+  const nearestDate = eligible[0]?.scheduled_date;
+  const candidates = eligible
+    .filter((task) => task.scheduled_date === nearestDate)
     .slice(0, limit);
 
   if (candidates.length === 0) {
@@ -258,6 +261,21 @@ export function autoPullTasks(
     rolledOverIds: [],
     autoPulledIds: candidates.map((task) => task.id),
   };
+}
+
+/** Prepares today's list for an API request: overdue work takes precedence;
+ * otherwise the nearest future batch of flexible work is shown today. */
+export function prepareTodayTasks(
+  tasks: readonly Task[],
+  today: string,
+  movedAt: string = new Date().toISOString(),
+): TaskOperationResult {
+  const rolledOver = rolloverTasks(tasks, today, movedAt);
+  if (rolledOver.changed) {
+    return rolledOver;
+  }
+
+  return autoPullTasks(rolledOver.tasks, today, movedAt);
 }
 
 export function patchTask(
