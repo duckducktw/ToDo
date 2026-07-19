@@ -8,6 +8,7 @@ import {
   withFileLock,
 } from "@/lib/json-file";
 import {
+  defaultNotificationSettings,
   usersFileSchema,
   type UsersFile,
 } from "@/lib/schemas";
@@ -62,6 +63,7 @@ export async function upsertUser(
       name: input.name,
       avatar_url: input.avatarUrl,
       timezone: existing?.timezone ?? DEFAULT_TIMEZONE,
+      notification_settings: existing?.notification_settings ?? defaultNotificationSettings,
       created_at: existing?.created_at ?? now,
       updated_at: now,
     };
@@ -139,3 +141,30 @@ export async function updateUserTimezone(
   });
 }
 
+export async function updateUserNotificationSettings(
+  userId: string,
+  notificationSettings: UserProfile["notification_settings"],
+  now: string = new Date().toISOString(),
+): Promise<UserProfile> {
+  const filePath = usersPath();
+  return withFileLock(filePath, async () => {
+    const document = await readOrInitializeUnlocked(filePath);
+    const index = document.users.findIndex((user) => user.id === userId);
+    if (index < 0) throw new AppError("NOT_FOUND", 404, "User profile not found.");
+
+    const user: UserProfile = {
+      ...document.users[index],
+      notification_settings: notificationSettings,
+      updated_at: now,
+    };
+    const users = [...document.users];
+    users[index] = user;
+    const candidate: UsersFile = { schema_version: 1, revision: document.revision + 1, users };
+    const validated = usersFileSchema.safeParse(candidate);
+    if (!validated.success) {
+      throw new AppError("INTERNAL_ERROR", 500, "The notification settings could not be stored.", validated.error);
+    }
+    await atomicWriteJson(filePath, validated.data);
+    return validated.data.users[index];
+  });
+}

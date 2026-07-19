@@ -5,6 +5,8 @@ import {
   dateRangeQuerySchema,
   patchTaskInputSchema,
   taskFileSchema,
+  userProfileSchema,
+  userSettingsInputSchema,
 } from "@/lib/schemas";
 import { buildTask } from "../fixtures/tasks";
 
@@ -58,6 +60,37 @@ describe("task input schemas", () => {
         to: "2026-09-01",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("notification setting schemas", () => {
+  it("adds default notification settings to existing user profiles", () => {
+    const user = userProfileSchema.parse({
+      id: "google_existing_user",
+      email: "existing@example.test",
+      name: "Existing User",
+      avatar_url: null,
+      timezone: "Asia/Taipei",
+      created_at: "2026-07-19T00:00:00.000Z",
+      updated_at: "2026-07-19T00:00:00.000Z",
+    });
+    expect(user.notification_settings).toMatchObject({ enabled: false, intervalHours: 2 });
+  });
+
+  it("accepts a strict synchronized notification setting update", () => {
+    expect(userSettingsInputSchema.safeParse({
+      notification_settings: {
+        enabled: true,
+        mode: "fixed",
+        intervalHours: 2,
+        slots: [{ start: "07:00", end: "11:30" }],
+        fixedTimes: ["09:00", "15:30"],
+        dndUntil: null,
+        dndIndefinite: false,
+        prefix: "加油！",
+      },
+    }).success).toBe(true);
+    expect(userSettingsInputSchema.safeParse({ notification_settings: { enabled: true } }).success).toBe(false);
   });
 });
 

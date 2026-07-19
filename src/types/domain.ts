@@ -29,8 +29,27 @@ export interface UserProfile {
   name: string;
   avatar_url: string | null;
   timezone: string;
+  notification_settings: NotificationSettings;
   created_at: string;
   updated_at: string;
+}
+
+export type NotificationScheduleMode = "interval" | "fixed";
+
+export interface NotificationTimeSlot {
+  start: string;
+  end: string;
+}
+
+export interface NotificationSettings {
+  enabled: boolean;
+  mode: NotificationScheduleMode;
+  intervalHours: 1 | 2 | 3 | 4 | 6;
+  slots: NotificationTimeSlot[];
+  fixedTimes: string[];
+  dndUntil: number | null;
+  dndIndefinite: boolean;
+  prefix: string;
 }
 
 export interface CalendarEvent {

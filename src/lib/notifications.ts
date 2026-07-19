@@ -1,26 +1,9 @@
-import type { Task } from "@/types/domain";
+import type { NotificationSettings, Task } from "@/types/domain";
 
-export const NOTIFICATION_STORAGE_KEY = "flow-todo.notification-settings.v1";
+export type { NotificationSettings } from "@/types/domain";
+
 export const NOTIFICATION_INTRO_KEY = "flow-todo.notification-intro.v1";
 export const NOTIFICATION_RUNTIME_KEY = "flow-todo.notification-runtime.v1";
-
-export type NotificationScheduleMode = "interval" | "fixed";
-
-export interface NotificationTimeSlot {
-  start: string;
-  end: string;
-}
-
-export interface NotificationSettings {
-  enabled: boolean;
-  mode: NotificationScheduleMode;
-  intervalHours: number;
-  slots: NotificationTimeSlot[];
-  fixedTimes: string[];
-  dndUntil: number | null;
-  dndIndefinite: boolean;
-  prefix: string;
-}
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   enabled: false,
@@ -47,7 +30,7 @@ export function readNotificationSettings(raw: string | null): NotificationSettin
     return {
       enabled: value.enabled === true,
       mode: value.mode === "fixed" ? "fixed" : "interval",
-      intervalHours: [1, 2, 3, 4, 6].includes(Number(value.intervalHours)) ? Number(value.intervalHours) : 2,
+      intervalHours: ([1, 2, 3, 4, 6].includes(Number(value.intervalHours)) ? Number(value.intervalHours) : 2) as NotificationSettings["intervalHours"],
       slots: Array.isArray(value.slots)
         ? value.slots.filter((slot) => validTime(slot?.start) && validTime(slot?.end)).slice(0, 4)
         : DEFAULT_NOTIFICATION_SETTINGS.slots,

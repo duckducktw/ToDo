@@ -5,7 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Bell, Clock3, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNotice, useTimezoneReady } from "@/app/providers";
-import type { TaskRangeResponse } from "@/types/domain";
+import type { NotificationSettings, TaskRangeResponse, UserProfile } from "@/types/domain";
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   formatTaskNotification,
@@ -13,10 +13,7 @@ import {
   isScheduledMinute,
   NOTIFICATION_INTRO_KEY,
   NOTIFICATION_RUNTIME_KEY,
-  NOTIFICATION_STORAGE_KEY,
   notificationMinuteKey,
-  readNotificationSettings,
-  type NotificationSettings,
 } from "@/lib/notifications";
 
 interface NotificationCenterProps {
@@ -30,15 +27,16 @@ function todayKey(date: Date) {
   return notificationMinuteKey(date).slice(0, 10);
 }
 
-function saveSettings(settings: NotificationSettings) {
-  window.localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(settings));
-  window.dispatchEvent(new CustomEvent("notification-settings-change", { detail: settings }));
+interface NotificationSettingsDialogProps extends NotificationCenterProps {
+  initialSettings: NotificationSettings;
+  onSave: (settings: NotificationSettings) => Promise<void>;
 }
 
-function NotificationSettingsDialog({ settingsOpen: open, onSettingsOpenChange: onOpenChange }: NotificationCenterProps) {
+function NotificationSettingsDialog({ settingsOpen: open, onSettingsOpenChange: onOpenChange, initialSettings, onSave }: NotificationSettingsDialogProps) {
   const { notify } = useNotice();
-  const [settings, setSettings] = useState(() => readNotificationSettings(window.localStorage.getItem(NOTIFICATION_STORAGE_KEY)));
+  const [settings, setSettings] = useState(initialSettings);
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">(() => "Notification" in window ? Notification.permission : "unsupported");
+  const [saving, setSaving] = useState(false);
 
   async function toggleEnabled() {
     if (!settings.enabled) {
@@ -56,16 +54,23 @@ function NotificationSettingsDialog({ settingsOpen: open, onSettingsOpenChange: 
     setSettings((current) => ({ ...current, enabled: !current.enabled }));
   }
 
-  function submit(event: React.FormEvent) {
+  async function submit(event: React.FormEvent) {
     event.preventDefault();
     const normalized = {
       ...settings,
       prefix: settings.prefix.trim().slice(0, 40),
       fixedTimes: [...new Set(settings.fixedTimes)].sort(),
     };
-    saveSettings(normalized);
-    notify("通知設定已儲存", "success");
-    onOpenChange(false);
+    setSaving(true);
+    try {
+      await onSave(normalized);
+      notify("通知設定已同步到所有裝置", "success");
+      onOpenChange(false);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "通知設定儲存失敗", "error");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function setDnd(value: string) {
@@ -97,7 +102,7 @@ function NotificationSettingsDialog({ settingsOpen: open, onSettingsOpenChange: 
                 <button type="button" className={settings.mode === "fixed" ? "active" : ""} onClick={() => setSettings({ ...settings, mode: "fixed" })}>指定時間</button>
               </div>
               {settings.mode === "interval" ? <div className="schedule-block">
-                <label className="inline-field"><span>通知頻率</span><select value={settings.intervalHours} onChange={(event) => setSettings({ ...settings, intervalHours: Number(event.target.value) })}>{[1,2,3,4,6].map((hour) => <option key={hour} value={hour}>每 {hour} 小時</option>)}</select></label>
+                <label className="inline-field"><span>通知頻率</span><select value={settings.intervalHours} onChange={(event) => setSettings({ ...settings, intervalHours: Number(event.target.value) as NotificationSettings["intervalHours"] })}>{[1,2,3,4,6].map((hour) => <option key={hour} value={hour}>每 {hour} 小時</option>)}</select></label>
                 <div className="slot-list">{settings.slots.map((slot, index) => <div className="time-row" key={index}>
                   <Clock3 size={16} /><input type="time" aria-label={`時段 ${index + 1} 開始`} value={slot.start} onChange={(event) => setSettings({ ...settings, slots: settings.slots.map((item, i) => i === index ? { ...item, start: event.target.value } : item) })} /><span>至</span><input type="time" aria-label={`時段 ${index + 1} 結束`} value={slot.end} onChange={(event) => setSettings({ ...settings, slots: settings.slots.map((item, i) => i === index ? { ...item, end: event.target.value } : item) })} />
                   <button type="button" className="icon-button compact" aria-label={`刪除時段 ${index + 1}`} disabled={settings.slots.length === 1} onClick={() => setSettings({ ...settings, slots: settings.slots.filter((_, i) => i !== index) })}><Trash2 size={15} /></button>
@@ -107,7 +112,7 @@ function NotificationSettingsDialog({ settingsOpen: open, onSettingsOpenChange: 
               <label className="field"><span>暫時勿擾</span><select value={dndValue} onChange={(event) => setDnd(event.target.value)}><option value="off">關閉</option>{dndValue === "active" ? <option value="active">進行中</option> : null}<option value="10">10 分鐘</option><option value="30">30 分鐘</option><option value="60">1 小時</option><option value="180">3 小時</option><option value="720">12 小時</option><option value="indefinite">直到我手動關閉</option></select><small>勿擾期間的通知會直接捨棄，不會稍後補送。</small></label>
               <label className="field"><span>通知前綴</span><input value={settings.prefix} maxLength={40} placeholder="例如：做得很好！" onChange={(event) => setSettings({ ...settings, prefix: event.target.value })} /></label>
             </fieldset>
-            <div className="dialog-actions"><Dialog.Close className="button secondary" type="button">取消</Dialog.Close><button className="button primary" type="submit">儲存設定</button></div>
+            <div className="dialog-actions"><Dialog.Close className="button secondary" type="button">取消</Dialog.Close><button className="button primary" type="submit" disabled={saving}>{saving ? "同步中…" : "儲存設定"}</button></div>
           </form>
         </Dialog.Content>
       </Dialog.Portal> : null}
@@ -117,18 +122,57 @@ function NotificationSettingsDialog({ settingsOpen: open, onSettingsOpenChange: 
 
 export function NotificationCenter(props: NotificationCenterProps) {
   const timezoneReady = useTimezoneReady();
+  const { notify } = useNotice();
   const [introOpen, setIntroOpen] = useState(false);
+  const [permissionOpen, setPermissionOpen] = useState(false);
+  const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const settingsRef = useRef(DEFAULT_NOTIFICATION_SETTINGS);
 
   useEffect(() => {
-    settingsRef.current = readNotificationSettings(window.localStorage.getItem(NOTIFICATION_STORAGE_KEY));
-    const introTimer = window.setTimeout(() => {
-      if (!window.localStorage.getItem(NOTIFICATION_INTRO_KEY)) setIntroOpen(true);
-    }, 0);
-    const update = (event: Event) => { settingsRef.current = (event as CustomEvent<NotificationSettings>).detail; };
-    window.addEventListener("notification-settings-change", update);
-    return () => { window.clearTimeout(introTimer); window.removeEventListener("notification-settings-change", update); };
+    if (!timezoneReady) return;
+    const controller = new AbortController();
+    void fetch("/api/me", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("無法載入通知設定");
+        return response.json() as Promise<{ user: UserProfile }>;
+      })
+      .then(({ user }) => {
+        settingsRef.current = user.notification_settings;
+        setSettings(user.notification_settings);
+        if (user.notification_settings.enabled) {
+          window.localStorage.setItem(NOTIFICATION_INTRO_KEY, "seen");
+          if (!("Notification" in window) || Notification.permission !== "granted") setPermissionOpen(true);
+        } else if (!window.localStorage.getItem(NOTIFICATION_INTRO_KEY)) {
+          setIntroOpen(true);
+        }
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) notify(error instanceof Error ? error.message : "無法載入通知設定", "error");
+      });
+    return () => controller.abort();
+  }, [notify, timezoneReady]);
+
+  const saveSettings = useCallback(async (nextSettings: NotificationSettings) => {
+    const response = await fetch("/api/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notification_settings: nextSettings }),
+    });
+    if (!response.ok) throw new Error("通知設定無法同步，請稍後再試");
+    const payload = await response.json() as { user: UserProfile };
+    settingsRef.current = payload.user.notification_settings;
+    setSettings(payload.user.notification_settings);
   }, []);
+
+  const requestPermission = useCallback(async () => {
+    setPermissionOpen(false);
+    if (!("Notification" in window)) {
+      notify("這個瀏覽器不支援系統通知", "error");
+      return;
+    }
+    const result = await Notification.requestPermission();
+    if (result !== "granted") notify("尚未取得通知權限，下次開啟時會再次詢問", "info");
+  }, [notify]);
 
   const dismissIntro = useCallback((open: boolean) => {
     setIntroOpen(open);
@@ -169,7 +213,8 @@ export function NotificationCenter(props: NotificationCenterProps) {
   }, [timezoneReady]);
 
   return <>
-    {props.settingsOpen ? <NotificationSettingsDialog {...props} /> : null}
+    {props.settingsOpen && settings ? <NotificationSettingsDialog {...props} initialSettings={settings} onSave={saveSettings} /> : null}
     <AlertDialog.Root open={introOpen} onOpenChange={dismissIntro}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="alert-content notification-intro"><span className="notification-intro-icon"><Bell size={24} /></span><AlertDialog.Title>不錯過今天的重要待辦</AlertDialog.Title><AlertDialog.Description>現在可以開啟瀏覽器通知，依你設定的時段提醒尚未完成的待辦。你隨時可以從頭像選單的「通知設定」調整或關閉。</AlertDialog.Description><div className="dialog-actions"><AlertDialog.Cancel className="button secondary">稍後再說</AlertDialog.Cancel><AlertDialog.Action className="button primary" onClick={() => props.onSettingsOpenChange(true)}>前往設定</AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
+    <AlertDialog.Root open={permissionOpen} onOpenChange={setPermissionOpen}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="alert-content notification-intro"><span className="notification-intro-icon"><Bell size={24} /></span><AlertDialog.Title>允許這台裝置顯示通知</AlertDialog.Title><AlertDialog.Description>你的通知設定已啟用，但這個瀏覽器尚未取得通知權限。允許後，這台裝置才能依照同步的排程提醒你。</AlertDialog.Description><div className="dialog-actions"><AlertDialog.Cancel className="button secondary">下次再說</AlertDialog.Cancel><AlertDialog.Action className="button primary" onClick={() => void requestPermission()}>允許</AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
   </>;
 }

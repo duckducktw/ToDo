@@ -16,6 +16,30 @@ export const timezoneSchema = z
 
 const isoTimestampSchema = z.iso.datetime({ offset: true });
 
+const notificationTimeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
+
+export const notificationSettingsSchema = z.object({
+  enabled: z.boolean(),
+  mode: z.enum(["interval", "fixed"]),
+  intervalHours: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(6)]),
+  slots: z.array(z.object({ start: notificationTimeSchema, end: notificationTimeSchema }).strict()).min(1).max(4),
+  fixedTimes: z.array(notificationTimeSchema).min(1).max(8),
+  dndUntil: z.number().int().nonnegative().nullable(),
+  dndIndefinite: z.boolean(),
+  prefix: z.string().max(40),
+}).strict();
+
+export const defaultNotificationSettings = {
+  enabled: false,
+  mode: "interval" as const,
+  intervalHours: 2 as const,
+  slots: [{ start: "07:00", end: "11:30" }, { start: "13:30", end: "17:30" }],
+  fixedTimes: ["09:00", "14:00", "17:00"],
+  dndUntil: null,
+  dndIndefinite: false,
+  prefix: "做得很好！",
+};
+
 export const automaticMoveSchema = z
   .object({
     kind: z.enum(["rollover", "auto_pull"]),
@@ -57,6 +81,7 @@ export const userProfileSchema = z
     name: z.string().min(1).max(200),
     avatar_url: z.string().url().nullable(),
     timezone: timezoneSchema,
+    notification_settings: notificationSettingsSchema.default(defaultNotificationSettings),
     created_at: isoTimestampSchema,
     updated_at: isoTimestampSchema,
   })
@@ -144,9 +169,15 @@ export const dateRangeQuerySchema = z
     },
   );
 
-export const timezoneInputSchema = z
-  .object({ timezone: timezoneSchema })
-  .strict();
+export const userSettingsInputSchema = z
+  .object({
+    timezone: timezoneSchema.optional(),
+    notification_settings: notificationSettingsSchema.optional(),
+  })
+  .strict()
+  .refine((value) => value.timezone !== undefined || value.notification_settings !== undefined, {
+    message: "At least one user setting is required.",
+  });
 
 export type TaskFile = z.infer<typeof taskFileSchema>;
 export type UsersFile = z.infer<typeof usersFileSchema>;
