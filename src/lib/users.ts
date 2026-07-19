@@ -102,6 +102,11 @@ export async function getUser(userId: string): Promise<UserProfile | null> {
   });
 }
 
+export async function getAllUsers(): Promise<UserProfile[]> {
+  const filePath = usersPath();
+  return withFileLock(filePath, async () => (await readOrInitializeUnlocked(filePath)).users);
+}
+
 export async function updateUserTimezone(
   userId: string,
   timezone: string,

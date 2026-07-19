@@ -52,7 +52,11 @@ function minutes(time: string) {
 }
 
 export function isScheduledMinute(settings: NotificationSettings, date: Date) {
-  const current = date.getHours() * 60 + date.getMinutes();
+  return isScheduledClockMinute(settings, date.getHours(), date.getMinutes());
+}
+
+export function isScheduledClockMinute(settings: NotificationSettings, hour: number, minute: number) {
+  const current = hour * 60 + minute;
   if (settings.mode === "fixed") {
     return settings.fixedTimes.some((time) => minutes(time) === current);
   }

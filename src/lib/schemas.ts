@@ -95,6 +95,29 @@ export const usersFileSchema = z
   })
   .strict();
 
+export const webPushSubscriptionSchema = z.object({
+  endpoint: z.url(),
+  // WebKit may omit this optional PushSubscriptionJSON member.
+  expirationTime: z.number().nonnegative().nullable().default(null),
+  keys: z.object({
+    p256dh: z.string().min(1).max(512),
+    auth: z.string().min(1).max(256),
+  }).strict(),
+}).strict();
+
+const pushUserStateSchema = z.object({
+  user_id: z.string().regex(/^google_[A-Za-z0-9_-]{1,200}$/),
+  subscriptions: z.array(webPushSubscriptionSchema).max(32),
+  last_dispatch_minute: z.string().nullable(),
+  empty_notification_date: dateSchema.nullable(),
+}).strict();
+
+export const pushStoreSchema = z.object({
+  schema_version: z.literal(1),
+  revision: z.number().int().nonnegative(),
+  users: z.array(pushUserStateSchema),
+}).strict();
+
 export const oauthCredentialSchema = z
   .object({
     schema_version: z.literal(1),
@@ -185,3 +208,4 @@ export type CreateTaskInput = z.infer<typeof createTaskInputSchema>;
 export type PatchTaskInput = z.infer<typeof patchTaskInputSchema>;
 export type ReorderTaskInput = z.infer<typeof reorderTaskInputSchema>;
 export type OAuthCredential = z.infer<typeof oauthCredentialSchema>;
+export type PushStore = z.infer<typeof pushStoreSchema>;

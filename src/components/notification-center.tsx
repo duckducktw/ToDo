@@ -3,17 +3,12 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Bell, Clock3, Plus, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNotice, useTimezoneReady } from "@/app/providers";
-import type { NotificationSettings, TaskRangeResponse, UserProfile } from "@/types/domain";
+import type { NotificationSettings, UserProfile, WebPushSubscription } from "@/types/domain";
 import {
-  DEFAULT_NOTIFICATION_SETTINGS,
-  formatTaskNotification,
   isDndActive,
-  isScheduledMinute,
   NOTIFICATION_INTRO_KEY,
-  NOTIFICATION_RUNTIME_KEY,
-  notificationMinuteKey,
 } from "@/lib/notifications";
 
 interface NotificationCenterProps {
@@ -21,10 +16,58 @@ interface NotificationCenterProps {
   onSettingsOpenChange: (open: boolean) => void;
 }
 
-interface RuntimeState { lastMinute?: string; emptyDate?: string }
+function base64UrlToUint8Array(value: string) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(window.atob(base64), (character) => character.charCodeAt(0));
+}
 
-function todayKey(date: Date) {
-  return notificationMinuteKey(date).slice(0, 10);
+async function pushApiError(response: Response, fallback: string) {
+  try {
+    const payload = await response.json() as { error?: { message?: string } };
+    return payload.error?.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function subscribeCurrentDevice(): Promise<NotificationPermission> {
+  if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    throw new Error("此裝置不支援背景通知；iPhone/iPad 請先將網站加入主畫面，再從主畫面開啟");
+  }
+  const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+  if (permission !== "granted") return permission;
+
+  const configResponse = await fetch("/api/push/config", { cache: "no-store" });
+  if (!configResponse.ok) throw new Error("無法取得 Web Push 設定");
+  const config = await configResponse.json() as { configured: boolean; public_key: string | null };
+  if (!config.configured || !config.public_key) throw new Error("伺服器尚未設定 Web Push 金鑰");
+
+  const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  await navigator.serviceWorker.ready;
+  const existing = await registration.pushManager.getSubscription();
+  const subscription = existing ?? await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: base64UrlToUint8Array(config.public_key),
+  });
+  const serialized = subscription.toJSON();
+  const payload = {
+    ...serialized,
+    expirationTime: serialized.expirationTime ?? null,
+  } as WebPushSubscription;
+  const response = await fetch("/api/push/subscriptions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await pushApiError(response, "無法登錄這台裝置的通知訂閱"));
+  return permission;
+}
+
+async function currentDeviceCanReceivePush() {
+  if (!("Notification" in window) || Notification.permission !== "granted" || !("serviceWorker" in navigator)) return false;
+  const registration = await navigator.serviceWorker.getRegistration("/");
+  return Boolean(await registration?.pushManager.getSubscription());
 }
 
 interface NotificationSettingsDialogProps extends NotificationCenterProps {
@@ -44,7 +87,13 @@ function NotificationSettingsDialog({ settingsOpen: open, onSettingsOpenChange: 
         notify("這個瀏覽器不支援系統通知", "error");
         return;
       }
-      const result = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
+      let result: NotificationPermission;
+      try {
+        result = await subscribeCurrentDevice();
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "無法啟用背景通知", "error");
+        return;
+      }
       setPermission(result);
       if (result !== "granted") {
         notify("請先在瀏覽器允許通知權限", "error");
@@ -126,7 +175,6 @@ export function NotificationCenter(props: NotificationCenterProps) {
   const [introOpen, setIntroOpen] = useState(false);
   const [permissionOpen, setPermissionOpen] = useState(false);
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
-  const settingsRef = useRef(DEFAULT_NOTIFICATION_SETTINGS);
 
   useEffect(() => {
     if (!timezoneReady) return;
@@ -136,12 +184,11 @@ export function NotificationCenter(props: NotificationCenterProps) {
         if (!response.ok) throw new Error("無法載入通知設定");
         return response.json() as Promise<{ user: UserProfile }>;
       })
-      .then(({ user }) => {
-        settingsRef.current = user.notification_settings;
+      .then(async ({ user }) => {
         setSettings(user.notification_settings);
         if (user.notification_settings.enabled) {
           window.localStorage.setItem(NOTIFICATION_INTRO_KEY, "seen");
-          if (!("Notification" in window) || Notification.permission !== "granted") setPermissionOpen(true);
+          if (!await currentDeviceCanReceivePush()) setPermissionOpen(true);
         } else if (!window.localStorage.getItem(NOTIFICATION_INTRO_KEY)) {
           setIntroOpen(true);
         }
@@ -160,57 +207,24 @@ export function NotificationCenter(props: NotificationCenterProps) {
     });
     if (!response.ok) throw new Error("通知設定無法同步，請稍後再試");
     const payload = await response.json() as { user: UserProfile };
-    settingsRef.current = payload.user.notification_settings;
     setSettings(payload.user.notification_settings);
   }, []);
 
   const requestPermission = useCallback(async () => {
     setPermissionOpen(false);
-    if (!("Notification" in window)) {
-      notify("這個瀏覽器不支援系統通知", "error");
-      return;
+    try {
+      const result = await subscribeCurrentDevice();
+      if (result !== "granted") notify("尚未取得通知權限，下次開啟時會再次詢問", "info");
+      else notify("這台裝置已啟用背景通知", "success");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "無法啟用背景通知", "error");
     }
-    const result = await Notification.requestPermission();
-    if (result !== "granted") notify("尚未取得通知權限，下次開啟時會再次詢問", "info");
   }, [notify]);
 
   const dismissIntro = useCallback((open: boolean) => {
     setIntroOpen(open);
     if (!open) window.localStorage.setItem(NOTIFICATION_INTRO_KEY, "seen");
   }, []);
-
-  useEffect(() => {
-    if (!timezoneReady) return;
-    const check = async () => {
-      const now = new Date();
-      const settings = settingsRef.current;
-      if (!settings.enabled || !("Notification" in window) || Notification.permission !== "granted" || !isScheduledMinute(settings, now)) return;
-      let runtime: RuntimeState = {};
-      try { runtime = JSON.parse(window.localStorage.getItem(NOTIFICATION_RUNTIME_KEY) || "{}"); } catch { /* use empty runtime */ }
-      const minute = notificationMinuteKey(now);
-      if (runtime.lastMinute === minute) return;
-      runtime.lastMinute = minute;
-      window.localStorage.setItem(NOTIFICATION_RUNTIME_KEY, JSON.stringify(runtime));
-      if (isDndActive(settings, now.getTime())) return;
-      const date = todayKey(now);
-      const response = await fetch(`/api/tasks?${new URLSearchParams({ from: date, to: date })}`, { cache: "no-store" });
-      if (!response.ok) return;
-      const data = await response.json() as TaskRangeResponse;
-      const remaining = data.tasks.filter((task) => task.status === "todo");
-      if (remaining.length === 0 && runtime.emptyDate === date) return;
-      if (remaining.length === 0) {
-        runtime.emptyDate = date;
-        window.localStorage.setItem(NOTIFICATION_RUNTIME_KEY, JSON.stringify(runtime));
-      }
-      const message = formatTaskNotification(settings.prefix, remaining);
-      new Notification(message.title, { body: message.body, icon: "/icons/icon-192.png", tag: `flow-todo-${minute}` });
-    };
-    void check();
-    const timer = window.setInterval(() => void check(), 30_000);
-    const visible = () => { if (document.visibilityState === "visible") void check(); };
-    document.addEventListener("visibilitychange", visible);
-    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", visible); };
-  }, [timezoneReady]);
 
   return <>
     {props.settingsOpen && settings ? <NotificationSettingsDialog {...props} initialSettings={settings} onSave={saveSettings} /> : null}

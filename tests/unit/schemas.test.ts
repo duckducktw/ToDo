@@ -7,6 +7,7 @@ import {
   taskFileSchema,
   userProfileSchema,
   userSettingsInputSchema,
+  webPushSubscriptionSchema,
 } from "@/lib/schemas";
 import { buildTask } from "../fixtures/tasks";
 
@@ -64,6 +65,17 @@ describe("task input schemas", () => {
 });
 
 describe("notification setting schemas", () => {
+  it("accepts WebKit push subscriptions without expirationTime", () => {
+    expect(webPushSubscriptionSchema.parse({
+      endpoint: "https://push.example.test/device",
+      keys: { p256dh: "public-key", auth: "auth-key" },
+    })).toEqual({
+      endpoint: "https://push.example.test/device",
+      expirationTime: null,
+      keys: { p256dh: "public-key", auth: "auth-key" },
+    });
+  });
+
   it("adds default notification settings to existing user profiles", () => {
     const user = userProfileSchema.parse({
       id: "google_existing_user",

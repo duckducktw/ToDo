@@ -69,11 +69,22 @@ The application asks for offline access so an expired Calendar access token can 
 | `AUTH_GOOGLE_SECRET` | Yes | Google OAuth web client secret |
 | `DATA_STORE_DIR` | No | JSON data root; defaults to `src/data` |
 | `APP_DEFAULT_TIMEZONE` | No | IANA fallback timezone; defaults to `Asia/Taipei` |
+| `VAPID_PUBLIC_KEY` | For Web Push | Stable public VAPID key shared with subscribing browsers |
+| `VAPID_PRIVATE_KEY` | For Web Push | Secret VAPID key used only by the server |
+| `VAPID_SUBJECT` | For Web Push | Operator contact as `mailto:` or an HTTPS URL |
 | `AUTH_TEST_MODE` | Tests only | Enables the hidden deterministic test identity when exactly `true` |
 | `TEST_AUTH_SECRET` | Tests only | Additional guard required by the browser-test sign-in flow |
 | `CALENDAR_FIXTURE_PATH` | Tests only | Local deterministic Calendar fixture used by automated tests |
 
 Never commit `.env`, OAuth credentials, `AUTH_SECRET`, or a populated data directory. Do not enable `AUTH_TEST_MODE` on a network-accessible instance.
+
+Generate the VAPID key pair once, copy it into `.env`, and keep the same pair for the lifetime of existing device subscriptions:
+
+```bash
+npx web-push generate-vapid-keys --json
+```
+
+Web Push requires HTTPS outside localhost. On iOS/iPadOS 16.4 or newer, install the app with **Add to Home Screen**, launch it from that icon, then press the in-app **允許** button. The built-in scheduler runs in the single long-lived Node.js server every 30 seconds; do not run multiple application replicas against this JSON store.
 
 ## Data storage
 
@@ -82,6 +93,7 @@ The default data root is `src/data`; it is created on first use and ignored by G
 ```text
 <DATA_STORE_DIR>/
 ├── users.json
+├── push-subscriptions.json
 ├── oauth/
 │   └── google_<subject>.json
 └── tasks/
@@ -145,6 +157,8 @@ All endpoints require an authenticated session, return private/no-store response
 | `PUT` | `/api/tasks/reorder` | Reorder or move an active task |
 | `DELETE` | `/api/tasks/:id` | Delete a task |
 | `PATCH` | `/api/me` | Save the browser's IANA timezone |
+| `GET` | `/api/push/config` | Read public Web Push availability and the VAPID public key |
+| `GET/POST/DELETE` | `/api/push/subscriptions` | Manage the signed-in user's device subscriptions |
 | `GET` | `/api/calendar?from=...&to=...` | Read normalized primary-calendar events |
 
 Task mutations send the current revision in `If-Match`. A `412` response means another request wrote first; clients refetch authoritative state before retrying.

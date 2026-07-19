@@ -52,6 +52,15 @@ export interface NotificationSettings {
   prefix: string;
 }
 
+export interface WebPushSubscription {
+  endpoint: string;
+  expirationTime: number | null;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}
+
 export interface CalendarEvent {
   id: string;
   title: string;
