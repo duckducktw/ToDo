@@ -42,6 +42,9 @@ async function signInWithHiddenProvider(page: Page, userId: string) {
 export const test = base.extend<AuthenticatedFixtures>({
   authenticatedPage: async ({ page }, provide, testInfo) => {
     await resetTestData();
+    await page.addInitScript(() => {
+      window.localStorage.setItem("flow-todo.notification-intro.v1", "seen");
+    });
     const projectName = testInfo.project.name.replace(/[^A-Za-z0-9_-]/g, "_");
     const userId = `e2e_${projectName}_${testInfo.workerIndex}_${testInfo.retry}`;
     await signInWithHiddenProvider(page, userId);

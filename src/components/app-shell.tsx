@@ -6,8 +6,10 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { CalendarDays, CheckCheck, Focus, LogOut, MoreVertical } from "lucide-react";
+import { Bell, CalendarDays, CheckCheck, Focus, LogOut, MoreVertical } from "lucide-react";
+import { useState } from "react";
 import { ThemeSwitch } from "@/components/theme-switch";
+import { NotificationCenter } from "@/components/notification-center";
 
 export function IconTooltip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -25,7 +27,7 @@ export function IconTooltip({ label, children }: { label: string; children: Reac
   );
 }
 
-function AccountMenu() {
+function AccountMenu({ onOpenNotifications }: { onOpenNotifications: () => void }) {
   const { data, status } = useSession();
   const user = data?.user;
 
@@ -54,6 +56,11 @@ function AccountMenu() {
             <span>{user?.email}</span>
           </div>
           <DropdownMenu.Separator className="menu-separator" />
+          <DropdownMenu.Item className="menu-item" onSelect={onOpenNotifications}>
+            <Bell aria-hidden="true" size={16} />
+            通知設定
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator className="menu-separator" />
           <DropdownMenu.Item className="menu-item danger" onSelect={() => void signOut({ redirectTo: "/login" })}>
             <LogOut aria-hidden="true" size={16} />
             登出
@@ -66,6 +73,7 @@ function AccountMenu() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
 
   return (
     <div className="app-frame">
@@ -89,7 +97,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           <div className="topbar-actions">
             <ThemeSwitch />
-            <AccountMenu />
+            <AccountMenu onOpenNotifications={() => setNotificationSettingsOpen(true)} />
           </div>
         </div>
       </header>
@@ -104,6 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           安排
         </Link>
       </nav>
+      <NotificationCenter settingsOpen={notificationSettingsOpen} onSettingsOpenChange={setNotificationSettingsOpen} />
     </div>
   );
 }
