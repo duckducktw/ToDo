@@ -2,7 +2,7 @@
 
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Bell, Clock3, Plus, Trash2, X } from "lucide-react";
+import { Bell, BellDot, Clock3, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNotice, useTimezoneReady } from "@/app/providers";
 import type { NotificationSettings, UserProfile, WebPushSubscription } from "@/types/domain";
@@ -10,6 +10,7 @@ import {
   isDndActive,
   NOTIFICATION_INTRO_KEY,
 } from "@/lib/notifications";
+import { APP_SETTINGS_SYNC_EVENT, requestAppBadgeSync, setAppBadgeEnabled } from "@/lib/app-badge";
 
 interface NotificationCenterProps {
   settingsOpen: boolean;
@@ -61,6 +62,7 @@ async function subscribeCurrentDevice(): Promise<NotificationPermission> {
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(await pushApiError(response, "無法登錄這台裝置的通知訂閱"));
+  requestAppBadgeSync();
   return permission;
 }
 
@@ -144,6 +146,11 @@ function NotificationSettingsDialog({ settingsOpen: open, onSettingsOpenChange: 
               <span><strong>瀏覽器通知</strong><small>{permission === "denied" ? "瀏覽器已封鎖通知權限" : "網站開啟期間依排程提醒"}</small></span>
               <button type="button" role="switch" aria-checked={settings.enabled} className="switch-control" onClick={() => void toggleEnabled()}><span /></button>
             </div>
+            <div className="notification-master">
+              <span className="notification-icon"><BellDot size={20} /></span>
+              <span><strong>App 圖示徽章</strong><small>顯示今天剩餘的待辦數量</small></span>
+              <button type="button" role="switch" aria-label="App 圖示徽章" aria-checked={settings.badgeEnabled} className="switch-control" onClick={() => setSettings({ ...settings, badgeEnabled: !settings.badgeEnabled })}><span /></button>
+            </div>
             <fieldset disabled={!settings.enabled} className="notification-fields">
               <legend>通知排程</legend>
               <div className="schedule-tabs" role="group" aria-label="排程方式">
@@ -176,28 +183,45 @@ export function NotificationCenter(props: NotificationCenterProps) {
   const [permissionOpen, setPermissionOpen] = useState(false);
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
 
+  const loadSettings = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch("/api/me", { cache: "no-store", signal });
+    if (!response.ok) throw new Error("無法載入通知設定");
+    const { user } = await response.json() as { user: UserProfile };
+    setSettings(user.notification_settings);
+    setAppBadgeEnabled(user.notification_settings.badgeEnabled);
+    if (user.notification_settings.enabled) {
+      window.localStorage.setItem(NOTIFICATION_INTRO_KEY, "seen");
+      if (!await currentDeviceCanReceivePush()) setPermissionOpen(true);
+    } else if (!window.localStorage.getItem(NOTIFICATION_INTRO_KEY)) {
+      setIntroOpen(true);
+    }
+  }, []);
+
   useEffect(() => {
     if (!timezoneReady) return;
     const controller = new AbortController();
-    void fetch("/api/me", { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("無法載入通知設定");
-        return response.json() as Promise<{ user: UserProfile }>;
-      })
-      .then(async ({ user }) => {
-        setSettings(user.notification_settings);
-        if (user.notification_settings.enabled) {
-          window.localStorage.setItem(NOTIFICATION_INTRO_KEY, "seen");
-          if (!await currentDeviceCanReceivePush()) setPermissionOpen(true);
-        } else if (!window.localStorage.getItem(NOTIFICATION_INTRO_KEY)) {
-          setIntroOpen(true);
-        }
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) notify(error instanceof Error ? error.message : "無法載入通知設定", "error");
-      });
-    return () => controller.abort();
-  }, [notify, timezoneReady]);
+    const timeout = window.setTimeout(() => {
+      void loadSettings(controller.signal)
+        .catch((error) => {
+          if (!controller.signal.aborted) notify(error instanceof Error ? error.message : "無法載入通知設定", "error");
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [loadSettings, notify, timezoneReady]);
+
+  useEffect(() => {
+    if (!timezoneReady) return;
+    const syncSettings = () => void loadSettings().catch(() => undefined);
+    window.addEventListener(APP_SETTINGS_SYNC_EVENT, syncSettings);
+    window.addEventListener("focus", syncSettings);
+    return () => {
+      window.removeEventListener(APP_SETTINGS_SYNC_EVENT, syncSettings);
+      window.removeEventListener("focus", syncSettings);
+    };
+  }, [loadSettings, timezoneReady]);
 
   const saveSettings = useCallback(async (nextSettings: NotificationSettings) => {
     const response = await fetch("/api/me", {
@@ -208,6 +232,7 @@ export function NotificationCenter(props: NotificationCenterProps) {
     if (!response.ok) throw new Error("通知設定無法同步，請稍後再試");
     const payload = await response.json() as { user: UserProfile };
     setSettings(payload.user.notification_settings);
+    setAppBadgeEnabled(payload.user.notification_settings.badgeEnabled);
   }, []);
 
   const requestPermission = useCallback(async () => {
@@ -227,7 +252,7 @@ export function NotificationCenter(props: NotificationCenterProps) {
   }, []);
 
   return <>
-    {props.settingsOpen && settings ? <NotificationSettingsDialog {...props} initialSettings={settings} onSave={saveSettings} /> : null}
+    {props.settingsOpen && settings ? <NotificationSettingsDialog key={JSON.stringify(settings)} {...props} initialSettings={settings} onSave={saveSettings} /> : null}
     <AlertDialog.Root open={introOpen} onOpenChange={dismissIntro}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="alert-content notification-intro"><span className="notification-intro-icon"><Bell size={24} /></span><AlertDialog.Title>不錯過今天的重要待辦</AlertDialog.Title><AlertDialog.Description>現在可以開啟瀏覽器通知，依你設定的時段提醒尚未完成的待辦。你隨時可以從頭像選單的「通知設定」調整或關閉。</AlertDialog.Description><div className="dialog-actions"><AlertDialog.Cancel className="button secondary">稍後再說</AlertDialog.Cancel><AlertDialog.Action className="button primary" onClick={() => props.onSettingsOpenChange(true)}>前往設定</AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
     <AlertDialog.Root open={permissionOpen} onOpenChange={setPermissionOpen}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="alert-content notification-intro"><span className="notification-intro-icon"><Bell size={24} /></span><AlertDialog.Title>允許這台裝置顯示通知</AlertDialog.Title><AlertDialog.Description>你的通知設定已啟用，但這個瀏覽器尚未取得通知權限。允許後，這台裝置才能依照同步的排程提醒你。</AlertDialog.Description><div className="dialog-actions"><AlertDialog.Cancel className="button secondary">下次再說</AlertDialog.Cancel><AlertDialog.Action className="button primary" onClick={() => void requestPermission()}>允許</AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
   </>;

@@ -69,6 +69,7 @@ describe("Web Push scheduler", () => {
     expect(JSON.parse(payload)).toMatchObject({
       title: "做得很好！",
       body: expect.stringContaining("完成 Web Push"),
+      badgeEnabled: false,
       remainingCount: 1,
     });
     expect(options).toMatchObject({ TTL: 60, urgency: "normal" });

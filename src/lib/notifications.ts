@@ -7,6 +7,7 @@ export const NOTIFICATION_RUNTIME_KEY = "flow-todo.notification-runtime.v1";
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   enabled: false,
+  badgeEnabled: false,
   mode: "interval",
   intervalHours: 2,
   slots: [
@@ -29,6 +30,7 @@ export function readNotificationSettings(raw: string | null): NotificationSettin
     const value = JSON.parse(raw) as Partial<NotificationSettings>;
     return {
       enabled: value.enabled === true,
+      badgeEnabled: value.badgeEnabled === true,
       mode: value.mode === "fixed" ? "fixed" : "interval",
       intervalHours: ([1, 2, 3, 4, 6].includes(Number(value.intervalHours)) ? Number(value.intervalHours) : 2) as NotificationSettings["intervalHours"],
       slots: Array.isArray(value.slots)

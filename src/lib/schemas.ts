@@ -20,6 +20,7 @@ const notificationTimeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
 
 export const notificationSettingsSchema = z.object({
   enabled: z.boolean(),
+  badgeEnabled: z.boolean().default(false),
   mode: z.enum(["interval", "fixed"]),
   intervalHours: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(6)]),
   slots: z.array(z.object({ start: notificationTimeSchema, end: notificationTimeSchema }).strict()).min(1).max(4),
@@ -31,6 +32,7 @@ export const notificationSettingsSchema = z.object({
 
 export const defaultNotificationSettings = {
   enabled: false,
+  badgeEnabled: false,
   mode: "interval" as const,
   intervalHours: 2 as const,
   slots: [{ start: "07:00", end: "11:30" }, { start: "13:30", end: "17:30" }],

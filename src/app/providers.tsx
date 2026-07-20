@@ -1,11 +1,12 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { SessionProvider, useSession } from "next-auth/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Info, TriangleAlert, X } from "lucide-react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { handleUnauthorizedResponse } from "@/lib/client-session";
+import { APP_SETTINGS_SYNC_EVENT } from "@/lib/app-badge";
 
 type NoticeKind = "success" | "error" | "info";
 
@@ -73,6 +74,23 @@ function TimezoneSync({
   return null;
 }
 
+function CrossDeviceSync() {
+  const { status } = useSession();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const events = new EventSource("/api/sync");
+    const syncTasks = () => void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    const syncSettings = () => window.dispatchEvent(new Event(APP_SETTINGS_SYNC_EVENT));
+    events.addEventListener("tasks", syncTasks);
+    events.addEventListener("settings", syncSettings);
+    return () => events.close();
+  }, [queryClient, status]);
+
+  return null;
+}
+
 function NoticeViewport({ notices, dismiss }: { notices: Notice[]; dismiss: (id: number) => void }) {
   return (
     <div className="notice-viewport" aria-live="polite" aria-atomic="false">
@@ -99,7 +117,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         defaultOptions: {
           queries: {
             staleTime: 15_000,
-            refetchOnWindowFocus: false,
+            refetchOnWindowFocus: true,
             retry: 1,
           },
           mutations: { retry: false },
@@ -139,6 +157,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           <NoticeContext.Provider value={noticeValue}>
             <TimezoneContext.Provider value={timezoneReady}>
               <TimezoneSync onReady={markTimezoneReady} onSignedOut={handleSignedOut} />
+              <CrossDeviceSync />
               {children}
               <NoticeViewport notices={notices} dismiss={dismiss} />
             </TimezoneContext.Provider>

@@ -51,6 +51,7 @@ export async function runPushScheduler(now: DateTime<boolean> = DateTime.utc()) 
     const message = formatTaskNotification(settings.prefix, remaining);
     const payload = JSON.stringify({
       ...message,
+      badgeEnabled: settings.badgeEnabled,
       remainingCount: remaining.length,
       tag: `flow-todo-${date}`,
       url: "/",

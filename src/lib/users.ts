@@ -13,6 +13,7 @@ import {
   type UsersFile,
 } from "@/lib/schemas";
 import type { UserProfile } from "@/types/domain";
+import { publishSyncEvent } from "@/lib/sync-events";
 
 const PROVIDER_ACCOUNT_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
 
@@ -142,6 +143,7 @@ export async function updateUserTimezone(
       );
     }
     await atomicWriteJson(filePath, validated.data);
+    publishSyncEvent(userId, "settings");
     return user;
   });
 }
@@ -170,6 +172,7 @@ export async function updateUserNotificationSettings(
       throw new AppError("INTERNAL_ERROR", 500, "The notification settings could not be stored.", validated.error);
     }
     await atomicWriteJson(filePath, validated.data);
+    publishSyncEvent(userId, "settings");
     return validated.data.users[index];
   });
 }

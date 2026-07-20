@@ -86,13 +86,14 @@ describe("notification setting schemas", () => {
       created_at: "2026-07-19T00:00:00.000Z",
       updated_at: "2026-07-19T00:00:00.000Z",
     });
-    expect(user.notification_settings).toMatchObject({ enabled: false, intervalHours: 2 });
+    expect(user.notification_settings).toMatchObject({ enabled: false, badgeEnabled: false, intervalHours: 2 });
   });
 
   it("accepts a strict synchronized notification setting update", () => {
     expect(userSettingsInputSchema.safeParse({
       notification_settings: {
         enabled: true,
+        badgeEnabled: true,
         mode: "fixed",
         intervalHours: 2,
         slots: [{ start: "07:00", end: "11:30" }],

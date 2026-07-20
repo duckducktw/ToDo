@@ -1,3 +1,9 @@
+self.addEventListener("install", () => self.skipWaiting());
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener("push", (event) => {
   let message = {};
   try {
@@ -11,6 +17,10 @@ self.addEventListener("push", (event) => {
     : null;
   const syncBadge = async () => {
     try {
+      if (message.badgeEnabled !== true) {
+        await self.navigator.clearAppBadge?.();
+        return;
+      }
       if (remainingCount === null) return;
       if (remainingCount > 0) await self.navigator.setAppBadge?.(remainingCount);
       else await self.navigator.clearAppBadge?.();

@@ -45,6 +45,7 @@ export interface NotificationTimeSlot {
 
 export interface NotificationSettings {
   enabled: boolean;
+  badgeEnabled: boolean;
   mode: NotificationScheduleMode;
   intervalHours: 1 | 2 | 3 | 4 | 6;
   slots: NotificationTimeSlot[];

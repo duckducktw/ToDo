@@ -10,6 +10,7 @@ import {
 import { taskFileSchema, type TaskFile } from "@/lib/schemas";
 import { normalizeTasks, type TaskOperationResult } from "@/lib/task-engine";
 import type { Task } from "@/types/domain";
+import { publishSyncEvent } from "@/lib/sync-events";
 
 const USER_ID_PATTERN = /^google_[A-Za-z0-9_-]{1,200}$/;
 
@@ -72,7 +73,7 @@ export async function mutateTaskStore(
 ): Promise<TaskTransactionResult> {
   const filePath = getTaskFilePath(userId);
 
-  return withFileLock(filePath, async () => {
+  const result = await withFileLock(filePath, async () => {
     const current = await readOrInitializeUnlocked(filePath);
     if (current.revision !== expectedRevision) {
       throw new AppError(
@@ -105,4 +106,6 @@ export async function mutateTaskStore(
     await atomicWriteJson(filePath, validated.data);
     return { document: validated.data, operation };
   });
+  if (result.operation.changed) publishSyncEvent(userId, "tasks");
+  return result;
 }
