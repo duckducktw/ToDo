@@ -72,7 +72,7 @@ export function TodayView() {
   );
   const rolledTasks = activeTasks.filter(isRolledOver);
   const regularTasks = activeTasks.filter((task) => !isRolledOver(task));
-  const taskActionsDisabled = actions.isPending || completion.completionActive || !rolloverReady;
+  const taskActionsDisabled = actions.isPending || !rolloverReady;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),

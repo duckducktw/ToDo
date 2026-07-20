@@ -141,6 +141,12 @@ test("rolls overdue work forward and auto-pulls the next flexible task", async (
 
   await expect(page.getByRole("heading", { name: "明日彈性任務" })).toBeVisible();
   await expect(page.getByText(/提前・\d+ 月 \d+ 日/)).toBeVisible();
+
+  const previewMenu = page.getByRole("button", { name: "「明日彈性任務」更多操作" });
+  await expect(previewMenu).toBeEnabled();
+  await previewMenu.click();
+  await page.getByRole("menuitem", { name: "編輯" }).click();
+  await expect(page.getByRole("dialog", { name: "編輯待辦" })).toBeVisible();
 });
 
 test("week and month planning views are responsive and pass WCAG AA smoke", async ({
