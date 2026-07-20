@@ -136,15 +136,16 @@ test("rolls overdue work forward and auto-pulls the next flexible task", async (
   await expect(page.getByText("延遲帶入")).toBeVisible();
   await expect(page.getByRole("heading", { name: "昨日固定任務" })).toBeVisible();
 
-  const finalTask = page.getByRole("checkbox", { name: "完成「今日收尾任務」" });
   await page.getByRole("checkbox", { name: "完成「昨日固定任務」" }).click();
-  await expect(finalTask).toBeDisabled();
+  await expect.poll(async () => {
+    const persisted = (await (await page.request.get(
+      `/api/tasks?from=${today}&to=${today}&focus=today`,
+    )).json()) as TaskRangeResponse;
+    return persisted.tasks.find((task) => task.title === "昨日固定任務")?.status;
+  }).toBe("done");
+  await page.reload();
+  const finalTask = page.getByRole("checkbox", { name: "完成「今日收尾任務」" });
   await expect(finalTask).toBeEnabled();
-  await page.evaluate(
-    () => new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    ),
-  );
   const finalCompletion = page.waitForResponse(
     (response) =>
       response.request().method() === "PATCH" &&
@@ -169,6 +170,42 @@ test("rolls overdue work forward and auto-pulls the next flexible task", async (
   await previewMenu.click();
   await page.getByRole("menuitem", { name: "編輯" }).click();
   await expect(page.getByRole("dialog", { name: "編輯待辦" })).toBeVisible();
+});
+
+test("shows the nearest future tasks when Today was already complete before loading", async ({
+  authenticatedPage: page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "State-based Today projection is covered once.");
+
+  const today = DateTime.now().setZone("Asia/Taipei").toISODate()!;
+  const tomorrow = DateTime.fromISO(today).plus({ days: 1 }).toISODate()!;
+  const initial = (await (await page.request.get(
+    `/api/tasks?from=${today}&to=${tomorrow}`,
+  )).json()) as TaskRangeResponse;
+  const createdToday = await createTask(page, initial.revision, {
+    title: "已先完成的今日任務",
+    scheduled_date: today,
+    is_flexible: true,
+  });
+  const todayTask = createdToday.tasks_by_date[today][0];
+  const completed = await page.request.patch(`/api/tasks/${todayTask.id}`, {
+    headers: { "If-Match": String(createdToday.revision) },
+    data: { status: "done" },
+  });
+  expect(completed.ok()).toBe(true);
+  const completedResult = (await completed.json()) as TaskMutationResponse;
+  await createTask(page, completedResult.revision, {
+    title: "重新開啟後應顯示的明日任務",
+    scheduled_date: tomorrow,
+    is_flexible: true,
+  });
+
+  await openTodayAfterRollover(page);
+
+  await expect(
+    page.getByRole("heading", { name: "重新開啟後應顯示的明日任務" }),
+  ).toBeVisible();
+  await expect(page.getByText(/提前・\d+ 月 \d+ 日/)).toBeVisible();
 });
 
 test("week and month planning views are responsive and pass WCAG AA smoke", async ({

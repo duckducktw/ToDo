@@ -144,7 +144,7 @@ describe("projectPlanningRange", () => {
 });
 
 describe("autoPullTasks", () => {
-  it("selects at most three flexible tasks across future dates", () => {
+  it("selects at most three flexible tasks from the nearest non-empty future date", () => {
     const doneToday = task(1, { status: "done", completed_at: NOW });
     const laterFirst = task(2, {
       scheduled_date: "2026-07-18",
@@ -177,20 +177,16 @@ describe("autoPullTasks", () => {
       NOW,
     );
 
-    expect(result.autoPulledIds).toEqual([
-      nearestFirst.id,
-      nearestSecond.id,
-      fourth.id,
-    ]);
+    expect(result.autoPulledIds).toEqual([nearestFirst.id, nearestSecond.id]);
     expect(
       result.tasks
         .filter((candidate) => candidate.scheduled_date === TODAY)
         .map(({ id }) => id),
-    ).toEqual([nearestFirst.id, nearestSecond.id, fourth.id, doneToday.id]);
+    ).toEqual([nearestFirst.id, nearestSecond.id, doneToday.id]);
     expect(
       result.tasks.find((candidate) => candidate.id === fourth.id)
-        ?.automatic_move,
-    ).toMatchObject({ kind: "auto_pull", from_date: "2026-07-17" });
+        ?.scheduled_date,
+    ).toBe("2026-07-17");
     expect(
       result.tasks.find((candidate) => candidate.id === locked.id)
         ?.scheduled_date,
@@ -199,6 +195,38 @@ describe("autoPullTasks", () => {
       result.tasks.find((candidate) => candidate.id === laterFirst.id)
         ?.scheduled_date,
     ).toBe("2026-07-18");
+  });
+
+  it("falls back to the day after tomorrow when tomorrow has no active flexible work", () => {
+    const doneTomorrow = task(1, {
+      scheduled_date: "2026-07-16",
+      origin_date: "2026-07-16",
+      status: "done",
+      completed_at: NOW,
+    });
+    const lockedTomorrow = task(2, {
+      scheduled_date: "2026-07-16",
+      origin_date: "2026-07-16",
+      is_flexible: false,
+    });
+    const flexibleDayAfter = task(3, {
+      scheduled_date: "2026-07-17",
+      origin_date: "2026-07-17",
+    });
+
+    const result = autoPullTasks(
+      [doneTomorrow, lockedTomorrow, flexibleDayAfter],
+      TODAY,
+      NOW,
+    );
+
+    expect(result.autoPulledIds).toEqual([flexibleDayAfter.id]);
+    expect(result.tasks.find(({ id }) => id === flexibleDayAfter.id)).toMatchObject({
+      scheduled_date: TODAY,
+      automatic_move: { kind: "auto_pull", from_date: "2026-07-17" },
+    });
+    expect(result.tasks.find(({ id }) => id === lockedTomorrow.id)?.scheduled_date)
+      .toBe("2026-07-16");
   });
 
   it("does nothing while today still has active work", () => {
@@ -235,13 +263,66 @@ describe("autoPullTasks", () => {
 });
 
 describe("projectTodayFocus", () => {
-  it("does not preview future work that has not been persistently pulled", () => {
-    const tomorrow = task(1, {
+  it("previews the nearest future date when all work through today is complete", () => {
+    const doneToday = task(1, { status: "done", completed_at: NOW });
+    const tomorrowFirst = task(2, {
       scheduled_date: "2026-07-16",
       origin_date: "2026-07-16",
     });
+    const tomorrowSecond = task(3, {
+      scheduled_date: "2026-07-16",
+      origin_date: "2026-07-16",
+    });
+    const dayAfter = task(4, {
+      scheduled_date: "2026-07-17",
+      origin_date: "2026-07-17",
+    });
 
-    expect(projectTodayFocus([tomorrow], TODAY)).toEqual([]);
+    const result = projectTodayFocus(
+      [doneToday, tomorrowFirst, tomorrowSecond, dayAfter],
+      TODAY,
+      NOW,
+    );
+
+    expect(result.map(({ id }) => id)).toEqual([
+      tomorrowFirst.id,
+      tomorrowSecond.id,
+      doneToday.id,
+    ]);
+    expect(result.slice(0, 2)).toEqual([
+      expect.objectContaining({
+        scheduled_date: "2026-07-16",
+        display_date: TODAY,
+        automatic_move: expect.objectContaining({ kind: "auto_pull" }),
+      }),
+      expect.objectContaining({
+        scheduled_date: "2026-07-16",
+        display_date: TODAY,
+        automatic_move: expect.objectContaining({ kind: "auto_pull" }),
+      }),
+    ]);
+    expect(result.some(({ id }) => id === dayAfter.id)).toBe(false);
+  });
+
+  it("falls through to the day after tomorrow when tomorrow has no active flexible task", () => {
+    const doneTomorrow = task(1, {
+      scheduled_date: "2026-07-16",
+      origin_date: "2026-07-16",
+      status: "done",
+      completed_at: NOW,
+    });
+    const dayAfter = task(2, {
+      scheduled_date: "2026-07-17",
+      origin_date: "2026-07-17",
+    });
+
+    expect(projectTodayFocus([doneTomorrow, dayAfter], TODAY, NOW)).toEqual([
+      expect.objectContaining({
+        id: dayAfter.id,
+        scheduled_date: "2026-07-17",
+        display_date: TODAY,
+      }),
+    ]);
   });
 
   it("does not preview future work while overdue work remains", () => {
@@ -261,6 +342,52 @@ describe("projectTodayFocus", () => {
 });
 
 describe("patchTask completion transitions", () => {
+  it("pulls tomorrow's tasks after the second of two Today tasks is completed", () => {
+    const todayFirst = task(1, { title: "task1" });
+    const todaySecond = task(2, { title: "task2" });
+    const tomorrowFirst = task(3, {
+      title: "task3",
+      scheduled_date: "2026-07-16",
+      origin_date: "2026-07-16",
+    });
+    const tomorrowSecond = task(4, {
+      title: "task4",
+      scheduled_date: "2026-07-16",
+      origin_date: "2026-07-16",
+    });
+
+    const firstCompletion = patchTask(
+      [todayFirst, todaySecond, tomorrowFirst, tomorrowSecond],
+      todayFirst.id,
+      { status: "done" },
+      TODAY,
+      NOW,
+    );
+    expect(firstCompletion.autoPulledIds).toEqual([]);
+
+    const finalCompletion = patchTask(
+      firstCompletion.tasks,
+      todaySecond.id,
+      { status: "done" },
+      TODAY,
+      NOW,
+    );
+
+    expect(finalCompletion.autoPulledIds).toEqual([
+      tomorrowFirst.id,
+      tomorrowSecond.id,
+    ]);
+    expect(projectTodayFocus(finalCompletion.tasks, TODAY).map(({ title, status }) => ({
+      title,
+      status,
+    }))).toEqual([
+      { title: "task3", status: "todo" },
+      { title: "task4", status: "todo" },
+      { title: "task2", status: "done" },
+      { title: "task1", status: "done" },
+    ]);
+  });
+
   it("persistently pulls up to three future tasks after today's work is complete", () => {
     const todayTask = task(1);
     const futures = [2, 3, 4, 5].map((number, index) =>

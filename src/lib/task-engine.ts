@@ -209,7 +209,10 @@ export function autoPullTasks(
         left.scheduled_date.localeCompare(right.scheduled_date) ||
         compareStable(left, right),
     );
-  const candidates = eligible.slice(0, limit);
+  const nearestDate = eligible[0]?.scheduled_date;
+  const candidates = eligible
+    .filter((task) => task.scheduled_date === nearestDate)
+    .slice(0, limit);
 
   if (candidates.length === 0) {
     return {
@@ -260,14 +263,50 @@ export function autoPullTasks(
   };
 }
 
-/** Builds the Today Focus response from tasks persistently scheduled for today. */
+/** Builds Today Focus, previewing the nearest future flexible batch when all
+ * work through today is already complete. Persistent pulls still happen in
+ * the completion mutation; this projection also covers revisits and reloads. */
 export function projectTodayFocus(
   tasks: readonly Task[],
   today: string,
+  projectedAt: string = new Date().toISOString(),
+  limit = 3,
 ): Task[] {
-  return normalizeTasks(
+  const todayTasks = normalizeTasks(
     tasks.filter((task) => task.scheduled_date === today),
   );
+  const hasCurrentWork = tasks.some(
+    (task) => task.status === "todo" && task.scheduled_date <= today,
+  );
+  if (hasCurrentWork || limit <= 0) return todayTasks;
+
+  const eligible = tasks
+    .filter(
+      (task) =>
+        task.status === "todo" &&
+        task.is_flexible &&
+        task.scheduled_date > today,
+    )
+    .sort(
+      (left, right) =>
+        left.scheduled_date.localeCompare(right.scheduled_date) ||
+        compareStable(left, right),
+    );
+  const nearestDate = eligible[0]?.scheduled_date;
+  const previews = eligible
+    .filter((task) => task.scheduled_date === nearestDate)
+    .slice(0, limit)
+    .map((task) => ({
+      ...task,
+      display_date: today,
+      automatic_move: {
+        kind: "auto_pull" as const,
+        from_date: task.scheduled_date,
+        moved_at: projectedAt,
+      },
+    }));
+
+  return [...previews, ...todayTasks];
 }
 
 /** Builds a response-only Planning projection that keeps rollover tasks on

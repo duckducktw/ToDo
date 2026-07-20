@@ -67,14 +67,7 @@ export function useCalendar(from: string, to: string) {
 export function replaceAffectedDates(client: QueryClient, result: TaskMutationResponse) {
   client.getQueriesData<TaskRangeResponse>({ queryKey: ["tasks"] }).forEach(([key, current]) => {
     if (!current) return;
-    const [, from, to, focusToday] = key as [string, string, string, boolean?];
-    if (focusToday) {
-      client.setQueryData<TaskRangeResponse>(key, {
-        ...current,
-        revision: result.revision,
-      });
-      return;
-    }
+    const [, from, to] = key as [string, string, string, boolean?];
     const taskDate = (task: Task) => task.display_date ?? task.scheduled_date;
     const affected = new Set(result.affected_dates);
     const replacement = Object.values(result.tasks_by_date)

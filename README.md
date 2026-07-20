@@ -118,7 +118,7 @@ and allow the container user to create, rename, and delete files in it.
 - The interface follows the device light/dark preference until the user chooses a theme; that explicit choice persists in the browser.
 - Interface motion is reduced automatically when the device requests reduced motion.
 - Loading Today, returning to a visible tab, or crossing a local-day boundary rolls every overdue incomplete task forward to today. Flexible and locked tasks both roll over.
-- Completing the last active task today persistently reschedules at most three future flexible tasks into today, ordered by nearest date and then task order. Completing that batch can pull another batch.
+- Completing the last active task today persistently reschedules at most three flexible tasks from the nearest non-empty future date into today. Tomorrow is preferred; if it has no eligible work, the next later date is used. Completing that batch can pull another batch.
 - Google Calendar is always read-only. Calendar failures do not block task operations.
 - Task titles are 1–120 trimmed characters; descriptions are optional and limited to 1,000 characters.
 
