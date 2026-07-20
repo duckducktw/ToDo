@@ -49,7 +49,12 @@ export async function runPushScheduler(now: DateTime<boolean> = DateTime.utc()) 
     if (remaining.length === 0 && !await claimEmptyNotification(user.id, date)) return;
 
     const message = formatTaskNotification(settings.prefix, remaining);
-    const payload = JSON.stringify({ ...message, tag: `flow-todo-${date}`, url: "/" });
+    const payload = JSON.stringify({
+      ...message,
+      remainingCount: remaining.length,
+      tag: `flow-todo-${date}`,
+      url: "/",
+    });
     await Promise.all(subscriptions.map((subscription) => sendToDevice(user.id, subscription, payload)));
   }));
 }

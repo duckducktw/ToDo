@@ -66,7 +66,11 @@ describe("Web Push scheduler", () => {
     expect(mocks.claimPushDispatch).toHaveBeenCalledWith("google_push_user", "Asia/Taipei:2026-07-19T09:00");
     expect(mocks.sendNotification).toHaveBeenCalledOnce();
     const [, payload, options] = mocks.sendNotification.mock.calls[0];
-    expect(JSON.parse(payload)).toMatchObject({ title: "做得很好！", body: expect.stringContaining("完成 Web Push") });
+    expect(JSON.parse(payload)).toMatchObject({
+      title: "做得很好！",
+      body: expect.stringContaining("完成 Web Push"),
+      remainingCount: 1,
+    });
     expect(options).toMatchObject({ TTL: 60, urgency: "normal" });
   });
 

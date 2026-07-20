@@ -6,13 +6,29 @@ self.addEventListener("push", (event) => {
     message = { title: "流動待辦", body: event.data ? event.data.text() : "" };
   }
 
-  event.waitUntil(self.registration.showNotification(message.title || "流動待辦", {
-    body: message.body || "",
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
-    tag: message.tag || "flow-todo-reminder",
-    data: { url: message.url || "/" },
-  }));
+  const remainingCount = Number.isInteger(message.remainingCount)
+    ? Math.max(0, message.remainingCount)
+    : null;
+  const syncBadge = async () => {
+    try {
+      if (remainingCount === null) return;
+      if (remainingCount > 0) await self.navigator.setAppBadge?.(remainingCount);
+      else await self.navigator.clearAppBadge?.();
+    } catch {
+      // Badge support and permission vary by browser and installation state.
+    }
+  };
+
+  event.waitUntil(Promise.all([
+    syncBadge(),
+    self.registration.showNotification(message.title || "流動待辦", {
+      body: message.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: message.tag || "flow-todo-reminder",
+      data: { url: message.url || "/" },
+    }),
+  ]));
 });
 
 self.addEventListener("notificationclick", (event) => {

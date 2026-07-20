@@ -10,6 +10,7 @@ import { Bell, CalendarDays, CheckCheck, Focus, LogOut, MoreVertical } from "luc
 import { useState } from "react";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { NotificationCenter } from "@/components/notification-center";
+import { AppBadgeSync } from "@/components/app-badge-sync";
 
 export function IconTooltip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -112,6 +113,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           安排
         </Link>
       </nav>
+      <AppBadgeSync />
       <NotificationCenter settingsOpen={notificationSettingsOpen} onSettingsOpenChange={setNotificationSettingsOpen} />
     </div>
   );
