@@ -209,10 +209,7 @@ export function autoPullTasks(
         left.scheduled_date.localeCompare(right.scheduled_date) ||
         compareStable(left, right),
     );
-  const nearestDate = eligible[0]?.scheduled_date;
-  const candidates = eligible
-    .filter((task) => task.scheduled_date === nearestDate)
-    .slice(0, limit);
+  const candidates = eligible.slice(0, limit);
 
   if (candidates.length === 0) {
     return {
@@ -263,50 +260,14 @@ export function autoPullTasks(
   };
 }
 
-/** Builds the response-only Today Focus projection without changing scheduling. */
+/** Builds the Today Focus response from tasks persistently scheduled for today. */
 export function projectTodayFocus(
   tasks: readonly Task[],
   today: string,
-  projectedAt: string = new Date().toISOString(),
-  limit = 3,
 ): Task[] {
-  const todayTasks = normalizeTasks(
+  return normalizeTasks(
     tasks.filter((task) => task.scheduled_date === today),
   );
-  const hasCurrentWork = tasks.some(
-    (task) => task.status === "todo" && task.scheduled_date <= today,
-  );
-  if (hasCurrentWork || limit <= 0) {
-    return todayTasks;
-  }
-
-  const eligible = tasks
-    .filter(
-      (task) =>
-        task.status === "todo" &&
-        task.is_flexible &&
-        task.scheduled_date > today,
-    )
-    .sort(
-      (left, right) =>
-        left.scheduled_date.localeCompare(right.scheduled_date) ||
-        compareStable(left, right),
-    );
-  const nearestDate = eligible[0]?.scheduled_date;
-  const previews = eligible
-    .filter((task) => task.scheduled_date === nearestDate)
-    .slice(0, limit)
-    .map((task) => ({
-      ...task,
-      display_date: today,
-      automatic_move: {
-        kind: "auto_pull" as const,
-        from_date: task.scheduled_date,
-        moved_at: projectedAt,
-      },
-    }));
-
-  return [...previews, ...todayTasks];
 }
 
 /** Builds a response-only Planning projection that keeps rollover tasks on
@@ -319,7 +280,7 @@ export function projectPlanningRange(
   return normalizeTasks(tasks)
     .map((task) =>
       task.automatic_move?.kind === "rollover"
-        ? { ...task, display_date: task.origin_date }
+        ? { ...task, display_date: task.automatic_move.from_date }
         : task,
     )
     .filter((task) => {
@@ -332,7 +293,7 @@ export function patchTask(
   tasks: readonly Task[],
   taskId: string,
   input: PatchTaskInput,
-  _today: string,
+  today: string,
   now: string = new Date().toISOString(),
 ): TaskOperationResult {
   const existing = tasks.find((task) => task.id === taskId);
@@ -401,13 +362,24 @@ export function patchTask(
   const nextTasks = normalizeTasks(
     tasks.map((task) => (task.id === taskId ? patched : { ...task })),
   );
-  const affectedDates = [existing.scheduled_date, patched.scheduled_date];
+  const completedToday =
+    existing.status === "todo" &&
+    input.status === "done" &&
+    existing.scheduled_date === today;
+  const pulled = completedToday
+    ? autoPullTasks(nextTasks, today, now)
+    : null;
+  const affectedDates = uniqueDates([
+    existing.scheduled_date,
+    patched.scheduled_date,
+    ...(pulled?.affectedDates ?? []),
+  ]);
   return {
-    tasks: nextTasks,
+    tasks: pulled?.tasks ?? nextTasks,
     changed: true,
-    affectedDates: uniqueDates(affectedDates),
+    affectedDates,
     rolledOverIds: [],
-    autoPulledIds: [],
+    autoPulledIds: pulled?.autoPulledIds ?? [],
   };
 }
 

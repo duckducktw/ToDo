@@ -112,6 +112,15 @@ const pushUserStateSchema = z.object({
   subscriptions: z.array(webPushSubscriptionSchema).max(32),
   last_dispatch_minute: z.string().nullable(),
   empty_notification_date: dateSchema.nullable(),
+  deliveries: z.array(z.object({
+    dispatch_key: z.string().min(1).max(100),
+    endpoint: z.url(),
+    payload: z.string().min(1).max(16_384),
+    attempts: z.number().int().nonnegative(),
+    next_attempt_at: isoTimestampSchema,
+    expires_at: isoTimestampSchema,
+    sent_at: isoTimestampSchema.nullable(),
+  }).strict()).max(256).default([]),
 }).strict();
 
 export const pushStoreSchema = z.object({

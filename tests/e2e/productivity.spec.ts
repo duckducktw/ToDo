@@ -136,11 +136,33 @@ test("rolls overdue work forward and auto-pulls the next flexible task", async (
   await expect(page.getByText("延遲帶入")).toBeVisible();
   await expect(page.getByRole("heading", { name: "昨日固定任務" })).toBeVisible();
 
+  const finalTask = page.getByRole("checkbox", { name: "完成「今日收尾任務」" });
   await page.getByRole("checkbox", { name: "完成「昨日固定任務」" }).click();
-  await page.getByRole("checkbox", { name: "完成「今日收尾任務」" }).click();
+  await expect(finalTask).toBeDisabled();
+  await expect(finalTask).toBeEnabled();
+  await page.evaluate(
+    () => new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    ),
+  );
+  const finalCompletion = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes("/api/tasks/"),
+  );
+  await finalTask.click();
+  expect((await finalCompletion).ok()).toBe(true);
 
   await expect(page.getByRole("heading", { name: "明日彈性任務" })).toBeVisible();
   await expect(page.getByText(/提前・\d+ 月 \d+ 日/)).toBeVisible();
+
+  await expect.poll(async () => {
+    const persisted = (await (await page.request.get(
+      `/api/tasks?from=${today}&to=${tomorrow}`,
+    )).json()) as TaskRangeResponse;
+    return persisted.tasks.find((task) => task.title === "明日彈性任務")
+      ?.scheduled_date;
+  }).toBe(today);
 
   const previewMenu = page.getByRole("button", { name: "「明日彈性任務」更多操作" });
   await expect(previewMenu).toBeEnabled();
@@ -152,6 +174,13 @@ test("rolls overdue work forward and auto-pulls the next flexible task", async (
 test("week and month planning views are responsive and pass WCAG AA smoke", async ({
   authenticatedPage: page,
 }) => {
+  const range = await page.request.get("/api/tasks?from=2026-07-15&to=2026-07-15");
+  const revision = ((await range.json()) as TaskRangeResponse).revision;
+  await createTask(page, revision, {
+    title: "月檢視可辨識任務",
+    scheduled_date: "2026-07-15",
+    is_flexible: true,
+  });
   await page.goto("/planning?view=week&date=2026-07-15");
   await expect(page.getByRole("heading", { name: "規劃" })).toBeVisible();
   await expect(page.getByRole("group", { name: "規劃檢視" })).toBeVisible();
@@ -165,6 +194,9 @@ test("week and month planning views are responsive and pass WCAG AA smoke", asyn
   await page.getByRole("button", { name: "月", exact: true }).click();
   await expect(page).toHaveURL(/view=month/);
   await expect(page.locator(".month-cell")).toHaveCount(42);
+  await expect(page.getByRole("list", { name: "7 月 15 日行程" })).toContainText("晨間檢視");
+  await expect(page.getByRole("button", { name: "拖曳「月檢視可辨識任務」" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "查看 7 月 15 日安排" })).toHaveAccessibleDescription(/1 項待辦；2 項行程.*專案會議.*月檢視可辨識任務/);
 
   const hasPageOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -296,4 +328,40 @@ test("moves a task to another day with pointer drag", async ({
     await page.request.get(`/api/tasks?from=${today}&to=${tomorrow}`)
   ).json()) as TaskRangeResponse;
   expect(persisted.tasks.find((task) => task.title === "跨日拖曳工作")?.scheduled_date).toBe(tomorrow);
+});
+
+test("moves a task to another day from the month grid", async ({
+  authenticatedPage: page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "Month pointer drag is covered once at desktop width.");
+
+  const today = DateTime.now().setZone("Asia/Taipei").toISODate()!;
+  const tomorrow = DateTime.fromISO(today).plus({ days: 1 }).toISODate()!;
+  const range = await page.request.get(`/api/tasks?from=${today}&to=${tomorrow}`);
+  const revision = ((await range.json()) as TaskRangeResponse).revision;
+  await createTask(page, revision, {
+    title: "月格跨日工作",
+    scheduled_date: today,
+    is_flexible: true,
+  });
+
+  await page.goto(`/planning?view=month&date=${today}`);
+  const handle = page.getByRole("button", { name: "拖曳「月格跨日工作」" }).first();
+  const targetLabel = `查看 ${DateTime.fromISO(tomorrow).setLocale("zh-TW").toFormat("M 月 d 日")}安排`;
+  const target = page.locator(".month-cell").filter({ has: page.getByRole("button", { name: targetLabel }) });
+  const start = await handle.boundingBox();
+  const destination = await target.boundingBox();
+  expect(start).not.toBeNull();
+  expect(destination).not.toBeNull();
+
+  await page.mouse.move(start!.x + start!.width / 2, start!.y + start!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(destination!.x + destination!.width / 2, destination!.y + destination!.height / 2, { steps: 12 });
+  await page.mouse.up();
+
+  await expect(target.getByRole("button", { name: "拖曳「月格跨日工作」" })).toBeVisible();
+  await expect.poll(async () => {
+    const persisted = (await (await page.request.get(`/api/tasks?from=${today}&to=${tomorrow}`)).json()) as TaskRangeResponse;
+    return persisted.tasks.find((task) => task.title === "月格跨日工作")?.scheduled_date;
+  }).toBe(tomorrow);
 });

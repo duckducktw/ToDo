@@ -85,6 +85,7 @@ npx web-push generate-vapid-keys --json
 ```
 
 Web Push requires HTTPS outside localhost. On iOS/iPadOS 16.4 or newer, install the app with **Add to Home Screen**, launch it from that icon, then press the in-app **允許** button. The built-in scheduler runs in the single long-lived Node.js server every 30 seconds; do not run multiple application replicas against this JSON store.
+Before composing a reminder, the scheduler rolls overdue work forward with the same domain transaction used by Today Focus. Deliveries are tracked per device: expired subscriptions are removed, while temporary provider failures retry with bounded backoff for up to 15 minutes. Pending retries remain paused during Do Not Disturb.
 
 ## Data storage
 
@@ -117,7 +118,7 @@ and allow the container user to create, rename, and delete files in it.
 - The interface follows the device light/dark preference until the user chooses a theme; that explicit choice persists in the browser.
 - Interface motion is reduced automatically when the device requests reduced motion.
 - Loading Today, returning to a visible tab, or crossing a local-day boundary rolls every overdue incomplete task forward to today. Flexible and locked tasks both roll over.
-- Completing the last active task today pulls at most three future flexible tasks into today. Completing that batch can pull another batch.
+- Completing the last active task today persistently reschedules at most three future flexible tasks into today, ordered by nearest date and then task order. Completing that batch can pull another batch.
 - Google Calendar is always read-only. Calendar failures do not block task operations.
 - Task titles are 1–120 trimmed characters; descriptions are optional and limited to 1,000 characters.
 

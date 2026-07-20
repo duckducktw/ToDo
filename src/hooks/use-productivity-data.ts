@@ -147,9 +147,6 @@ export function useTaskActions() {
         replaceAffectedDates(client, result);
       }
       if (input.successMessage) notify(input.successMessage, "success");
-      if (result.auto_pulled_ids.length > 0) {
-        notify(`已從未來安排中帶入 ${result.auto_pulled_ids.length} 項彈性待辦`, "info");
-      }
       void client.invalidateQueries({ queryKey: ["tasks"] });
     },
     onError: (error, _input, context) => {

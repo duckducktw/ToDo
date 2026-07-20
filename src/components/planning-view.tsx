@@ -14,7 +14,8 @@ import {
   type DragStartEvent,
   type CollisionDetection,
 } from "@dnd-kit/core";
-import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { DateTime } from "luxon";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -133,11 +134,32 @@ interface MonthCellProps {
   events: CalendarEvent[];
   timezone: string;
   completingIds: ReadonlySet<string>;
+  disabled: boolean;
   onSelect: (date: string) => void;
   onAdd: (date: string) => void;
 }
 
-function MonthCell({ date, currentMonth, today, selected, tasks, events, timezone, completingIds, onSelect, onAdd }: MonthCellProps) {
+function MonthTask({ task, disabled }: { task: Task; disabled: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `month:${task.id}`,
+    data: { task },
+    disabled,
+  });
+
+  return (
+    <li
+      ref={setNodeRef}
+      className={`month-task${task.is_flexible ? " flexible" : " locked"}${isDragging ? " dragging" : ""}`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      <button type="button" aria-label={`拖曳「${task.title}」`} {...attributes} {...listeners}>
+        {task.title}
+      </button>
+    </li>
+  );
+}
+
+function MonthCell({ date, currentMonth, today, selected, tasks, events, timezone, completingIds, disabled, onSelect, onAdd }: MonthCellProps) {
   const { setNodeRef, isOver } = useDroppable({ id: `day:${date}`, data: { date } });
   const value = DateTime.fromISO(date).setLocale("zh-TW");
   const active = tasks.filter((task) => task.status === "todo" || completingIds.has(task.id)).sort((a, b) => a.sequence_order - b.sequence_order);
@@ -148,25 +170,41 @@ function MonthCell({ date, currentMonth, today, selected, tasks, events, timezon
     return Boolean(start && end && start <= date && end >= date);
   });
   const overflow = Math.max(0, active.length - 2) + Math.max(0, matchingEvents.length - 1);
+  const visibleTasks = active.slice(0, 2);
+  const summaryId = `month-summary-${date}`;
+  const dateLabel = value.toFormat("M 月 d 日");
+  const summary = [
+    `${active.length} 項待辦`,
+    `${matchingEvents.length} 項行程`,
+    ...matchingEvents.map((event) => `行程：${event.title}`),
+    ...active.map((task) => `待辦：${task.title}`),
+  ].join("；");
 
   return (
-    <div ref={setNodeRef} className={`month-cell${value.month !== currentMonth ? " outside" : ""}${date === today ? " today" : ""}${selected ? " selected" : ""}${isOver ? " drop-target" : ""}`}>
+    <section ref={setNodeRef} className={`month-cell${value.month !== currentMonth ? " outside" : ""}${date === today ? " today" : ""}${selected ? " selected" : ""}${isOver ? " drop-target" : ""}`} aria-label={`${dateLabel}安排`}>
       <div className="month-cell-header">
-        <button type="button" className="month-date-button" onClick={() => onSelect(date)} aria-label={`查看 ${value.toFormat("M 月 d 日")}安排`} aria-current={date === today ? "date" : undefined}>
+        <button type="button" className="month-date-button" onClick={() => onSelect(date)} aria-label={`查看 ${dateLabel}安排`} aria-describedby={summaryId} aria-current={date === today ? "date" : undefined}>
           {value.day}
         </button>
         <button type="button" className="month-add-button" onClick={() => onAdd(date)} aria-label={`在 ${value.toFormat("M 月 d 日")}新增待辦`}>
           <Plus aria-hidden="true" size={14} />
         </button>
       </div>
-      <button type="button" className="month-cell-body" onClick={() => onSelect(date)} tabIndex={-1} aria-hidden="true">
-        {matchingEvents.slice(0, 1).map((event) => <span className="month-event" key={event.id}>{event.is_all_day ? "全天" : DateTime.fromISO(event.start, { setZone: true }).setZone(timezone).toFormat("HH:mm")} {event.title}</span>)}
-        {active.slice(0, 2).map((task) => (
-          <span className={`month-task${task.is_flexible ? " flexible" : " locked"}`} key={task.id}>{task.title}</span>
-        ))}
+      <div className="month-cell-body">
+        <span className="screen-reader-status" id={summaryId}>{summary}</span>
+        {matchingEvents.length > 0 ? (
+          <ul className="month-event-list" aria-label={`${dateLabel}行程`}>
+            {matchingEvents.slice(0, 1).map((event) => <li className="month-event" key={event.id}>{event.is_all_day ? "全天" : DateTime.fromISO(event.start, { setZone: true }).setZone(timezone).toFormat("HH:mm")} {event.title}</li>)}
+          </ul>
+        ) : null}
+        <SortableContext items={visibleTasks.map((task) => `month:${task.id}`)} strategy={verticalListSortingStrategy}>
+          <ul className="month-task-list" aria-label={`${dateLabel}待辦`}>
+            {visibleTasks.map((task) => <MonthTask task={task} disabled={disabled || completingIds.has(task.id)} key={task.id} />)}
+          </ul>
+        </SortableContext>
         {overflow > 0 ? <span className="month-overflow">另有 {overflow} 項安排</span> : null}
-      </button>
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -267,12 +305,14 @@ export function PlanningView() {
   }
 
   function handleDragStart(event: DragStartEvent) {
-    const task = allActive.find((candidate) => candidate.id === event.active.id);
+    const task = event.active.data.current?.task as Task | undefined
+      ?? allActive.find((candidate) => candidate.id === event.active.id);
     if (task) setDragAnnouncement(`已抓取 ${task.title}`);
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    const task = allActive.find((candidate) => candidate.id === event.active.id);
+    const task = event.active.data.current?.task as Task | undefined
+      ?? allActive.find((candidate) => candidate.id === event.active.id);
     if (!task || !event.over || !taskQuery.data || taskActionsDisabled) return;
     let destinationDate: string;
     let destinationIndex: number;
@@ -281,7 +321,8 @@ export function PlanningView() {
       destinationDate = overId.slice(4);
       destinationIndex = activeForDate(destinationDate).filter((candidate) => candidate.id !== task.id).length;
     } else {
-      const overTask = allActive.find((candidate) => candidate.id === event.over?.id);
+      const overTask = event.over.data.current?.task as Task | undefined
+        ?? allActive.find((candidate) => candidate.id === event.over?.id);
       if (!overTask) return;
       destinationDate = planningDate(overTask);
       destinationIndex = activeForDate(destinationDate).findIndex((candidate) => candidate.id === overTask.id);
@@ -391,6 +432,7 @@ export function PlanningView() {
                     events={calendarEvents}
                     timezone={calendarTimezone}
                     completingIds={completion.completingIds}
+                    disabled={taskActionsDisabled}
                     onSelect={(selected) => updateUrl("month", selected)}
                     onAdd={openCreate}
                   />
